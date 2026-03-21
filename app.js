@@ -296,10 +296,14 @@ async function fetchAndRenderSSL(domain, mode) {
 
   const ep   = data.endpoints[0];
   const det  = ep.details || {};
-  const cert = det.cert || det.chain?.certs?.[0] || {};
+
+  // SSL Labs stores certs in details.certChains[0].certIds -> details.certs[]
+  const certId = det.certChains?.[0]?.certIds?.[0];
+  const cert = det.certs?.find(c => c.id === certId) || det.certs?.[0] || {};
+
   const grade = ep.grade || '?';
 
-  // Dates
+  // Dates — SSL Labs uses milliseconds
   const notBefore = cert.notBefore ? new Date(cert.notBefore).toLocaleDateString('es-CL') : '—';
   const notAfter  = cert.notAfter  ? new Date(cert.notAfter).toLocaleDateString('es-CL')  : '—';
   const daysLeft  = cert.notAfter  ? Math.ceil((cert.notAfter - Date.now()) / 86400000)    : null;
@@ -309,11 +313,17 @@ async function fetchAndRenderSSL(domain, mode) {
 
   // Protocols
   const protos = (det.protocols || []).map(p =>
-    `<span class="tag ${p.name === 'TLS' && p.version >= '1.2' ? 'tag-ok' : 'tag-err'}">${p.name} ${p.version}</span>`
+    `<span class="tag ${p.name === 'TLS' && parseFloat(p.version) >= 1.2 ? 'tag-ok' : 'tag-err'}">${p.name} ${p.version}</span>`
   ).join(' ');
 
-  // SANs
-  const sans = (cert.altNames || []).slice(0, 8).join(', ') || '—';
+  // SANs — SSL Labs stores them in cert.dnsCaa or cert.altNames
+  const sans = (cert.altNames || cert.commonNames || []).slice(0, 8).join(', ') || cert.subject || '—';
+
+  // Issuer
+  const issuer = cert.issuerLabel || cert.issuerSubject || '—';
+
+  // Key info
+  const keyInfo = [cert.keyAlg, cert.keySize ? cert.keySize + 'bit' : ''].filter(Boolean).join(' ') || '—';
 
   // Vulnerabilities
   const vulns = [
@@ -340,10 +350,10 @@ async function fetchAndRenderSSL(domain, mode) {
         </div>
         <table class="rec-table"><tbody>
           <tr><td class="rec-name">SUJETO</td><td class="rec-data">${cert.subject || '—'}</td></tr>
-          <tr><td class="rec-name">EMISOR</td><td class="rec-data">${cert.issuerLabel || cert.issuerSubject || '—'}</td></tr>
+          <tr><td class="rec-name">EMISOR</td><td class="rec-data">${issuer}</td></tr>
           <tr><td class="rec-name">VÁLIDO DESDE</td><td class="rec-data">${notBefore}</td></tr>
           <tr><td class="rec-name">VÁLIDO HASTA</td><td class="rec-data">${notAfter} ${daysTag}</td></tr>
-          <tr><td class="rec-name">TIPO</td><td class="rec-data">${cert.keyAlg || '—'} ${cert.keySize ? cert.keySize+'bit' : ''}</td></tr>
+          <tr><td class="rec-name">TIPO</td><td class="rec-data">${keyInfo}</td></tr>
           <tr><td class="rec-name">FIRMA</td><td class="rec-data">${cert.sigAlg || '—'}</td></tr>
           <tr><td class="rec-name">DOMINIOS (SAN)</td><td class="rec-data">${sans}</td></tr>
           <tr><td class="rec-name">SERIAL</td><td class="rec-data" style="font-size:11px">${cert.serialNumber || '—'}</td></tr>
@@ -356,7 +366,7 @@ async function fetchAndRenderSSL(domain, mode) {
     <div class="ssl-hero">
       <div class="ssl-grade" style="color:${gradeColor(grade)}">${grade}</div>
       <div>
-        <div style="font-size:16px;color:var(--text-bright);font-family:'Space Mono',monospace">${domain}</div>
+        <div style="font-size:16px;color:var(--text-bright);font-family:'Space Mono',monospace">${data.host}</div>
         <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${ep.ipAddress || ''}</div>
       </div>
       <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">${hsts} ${protos}</div>
@@ -365,9 +375,9 @@ async function fetchAndRenderSSL(domain, mode) {
     <div class="result-block" style="margin-top:16px">
       <div class="result-block-header"><span class="rec-type-badge type-A">CERTIFICADO</span>${daysTag}</div>
       <table class="rec-table"><tbody>
-        <tr><td class="rec-name">EMISOR</td><td class="rec-data">${cert.issuerLabel || cert.issuerSubject || '—'}</td></tr>
+        <tr><td class="rec-name">EMISOR</td><td class="rec-data">${issuer}</td></tr>
         <tr><td class="rec-name">VÁLIDO HASTA</td><td class="rec-data">${notAfter} ${daysTag}</td></tr>
-        <tr><td class="rec-name">TIPO</td><td class="rec-data">${cert.keyAlg || '—'} ${cert.keySize ? cert.keySize+'bit' : ''}</td></tr>
+        <tr><td class="rec-name">TIPO</td><td class="rec-data">${keyInfo}</td></tr>
         <tr><td class="rec-name">DOMINIOS</td><td class="rec-data">${sans}</td></tr>
       </tbody></table>
     </div>
