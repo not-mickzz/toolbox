@@ -34,15 +34,19 @@ const TOOLS = {
   'ip-whois':    { category:'ip', label:'IP WHOIS',    icon:'📋', desc:'Bloque de red, organización registrante y contacto de abuso.' },
   'reverse-dns': { category:'ip', label:'Reverse DNS', icon:'↩', desc:'Resolución inversa PTR: hostname asociado a una IP.', types:['PTR'] },
   // SSL
-  'ssl-check':   { category:'ssl', label:'SSL Check',    icon:'🔒', desc:'Análisis completo SSL/TLS con puntuación A+/A/B/C/D/F (via SSL Labs).' },
-  'ssl-cert':    { category:'ssl', label:'Certificado',  icon:'📜', desc:'Detalles del certificado: CA, expiración, SANs, cadena de confianza.' },
-  'ssl-headers': { category:'ssl', label:'HTTP Headers', icon:'🛡️', desc:'Analiza headers de seguridad HTTP: HSTS, CSP, X-Frame-Options y más.' },
+  'ssl-check':   { category:'ssl', label:'SSL Check',   icon:'🔒', desc:'Análisis completo SSL/TLS con puntuación A+/A/B/C/D/F (via SSL Labs).' },
+  'ssl-cert':    { category:'ssl', label:'Certificado', icon:'📜', desc:'Detalles del certificado: CA, expiración, SANs, cadena de confianza.' },
+  // Web
+  'web-headers': { category:'web', label:'HTTP Headers',    icon:'🛡️', desc:'Analiza headers de seguridad: HSTS, CSP, X-Frame-Options y más.' },
+  'web-timing':  { category:'web', label:'Response Time',   icon:'⚡', desc:'Tiempo de respuesta del servidor, TTFB y estado HTTP.' },
+  'web-tech':    { category:'web', label:'Technologies',    icon:'🔬', desc:'Detecta CMS, frameworks, servidores web y librerías.' },
 };
 
 const CATEGORIES = {
   dns: { label:'DNS',       icon:'⬡' },
   ip:  { label:'IP Tools',  icon:'◎' },
   ssl: { label:'SSL / TLS', icon:'🔒' },
+  web: { label:'Web',       icon:'🌍' },
 };
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
@@ -71,8 +75,8 @@ function selectCategory(cat) {
   document.getElementById('resolverRow').style.display = cat === 'dns' ? 'flex' : 'none';
   document.getElementById('domainInput').placeholder = cat === 'dns'
     ? 'ej: google.com, mickzz.xyz'
-    : cat === 'ssl'
-    ? 'ej: google.com, mickzz.xyz'
+    : cat === 'ssl' || cat === 'web'
+    ? 'ej: mickzz.xyz, google.com'
     : 'ej: 8.8.8.8, 1.1.1.1, 2606:4700::1111';
 }
 
@@ -429,6 +433,122 @@ async function fetchSSLHeaders(domain) {
     </div>`;
 }
 
+// ── WEB ───────────────────────────────────────────────────────────────────────
+async function fetchWebTiming(domain) {
+  const start = performance.now();
+  const res = await fetch(`${WORKER_URL}/headers/${encodeURIComponent(domain)}`);
+  const elapsed = Math.round(performance.now() - start);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const headers = await res.json();
+
+  const status = headers['x-worker-status'] || '200';
+  const server = headers['server'] || headers['x-powered-by'] || '—';
+  const contentType = headers['content-type'] || '—';
+  const cacheControl = headers['cache-control'] || '—';
+  const via = headers['via'] || '—';
+  const cf = headers['cf-ray'] ? '✅ Cloudflare' : '—';
+
+  const speedTag = elapsed < 300
+    ? `<span class="tag tag-ok">⚡ RÁPIDO</span>`
+    : elapsed < 1000
+    ? `<span class="tag tag-warn">⏱ NORMAL</span>`
+    : `<span class="tag tag-err">🐌 LENTO</span>`;
+
+  return `
+    <div class="result-block">
+      <div class="result-block-header">
+        <span class="rec-type-badge type-A">RESPONSE TIME</span>
+        <span class="tag tag-ok">${elapsed}ms</span>
+        ${speedTag}
+      </div>
+      <table class="rec-table"><tbody>
+        <tr><td class="rec-name">TIEMPO TOTAL</td><td class="rec-data" style="font-size:18px;color:var(--accent);font-family:'Space Mono',monospace">${elapsed}ms</td></tr>
+        <tr><td class="rec-name">SERVIDOR</td><td class="rec-data">${server}</td></tr>
+        <tr><td class="rec-name">CDN</td><td class="rec-data">${cf}</td></tr>
+        <tr><td class="rec-name">VIA</td><td class="rec-data">${via}</td></tr>
+        <tr><td class="rec-name">CONTENT-TYPE</td><td class="rec-data">${contentType}</td></tr>
+        <tr><td class="rec-name">CACHE-CONTROL</td><td class="rec-data">${cacheControl}</td></tr>
+      </tbody></table>
+    </div>`;
+}
+
+async function fetchWebTech(domain) {
+  const res = await fetch(`${WORKER_URL}/headers/${encodeURIComponent(domain)}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const headers = await res.json();
+
+  // Detect technologies from headers
+  const techs = [];
+
+  // Server
+  const server = headers['server'] || '';
+  if (server.toLowerCase().includes('nginx'))   techs.push({ cat:'Servidor',  name:'Nginx',           tag:'tag-ok' });
+  if (server.toLowerCase().includes('apache'))  techs.push({ cat:'Servidor',  name:'Apache',          tag:'tag-ok' });
+  if (server.toLowerCase().includes('caddy'))   techs.push({ cat:'Servidor',  name:'Caddy',           tag:'tag-ok' });
+  if (server.toLowerCase().includes('iis'))     techs.push({ cat:'Servidor',  name:'IIS (Microsoft)', tag:'tag-info' });
+  if (server.toLowerCase().includes('cloudflare')) techs.push({ cat:'CDN',    name:'Cloudflare',      tag:'tag-ok' });
+  if (server.toLowerCase().includes('openresty')) techs.push({ cat:'Servidor',name:'OpenResty',       tag:'tag-ok' });
+
+  // CDN / Proxy
+  if (headers['cf-ray'])                        techs.push({ cat:'CDN',       name:'Cloudflare',      tag:'tag-ok' });
+  if (headers['x-amz-cf-id'])                   techs.push({ cat:'CDN',       name:'AWS CloudFront',  tag:'tag-ok' });
+  if (headers['x-azure-ref'])                   techs.push({ cat:'CDN',       name:'Azure CDN',       tag:'tag-ok' });
+  if (headers['x-fastly-request-id'])           techs.push({ cat:'CDN',       name:'Fastly',          tag:'tag-ok' });
+  if (headers['x-vercel-id'])                   techs.push({ cat:'Hosting',   name:'Vercel',          tag:'tag-ok' });
+  if (headers['x-netlify'] || headers['netlify']) techs.push({ cat:'Hosting', name:'Netlify',         tag:'tag-ok' });
+  if (headers['x-github-request-id'])           techs.push({ cat:'Hosting',   name:'GitHub Pages',    tag:'tag-ok' });
+
+  // Frameworks / CMS
+  const powered = headers['x-powered-by'] || '';
+  if (powered.toLowerCase().includes('php'))    techs.push({ cat:'Lenguaje',  name:`PHP ${powered.match(/\d[\d.]*/)?.[0]||''}`, tag:'tag-info' });
+  if (powered.toLowerCase().includes('asp.net')) techs.push({ cat:'Framework',name:'ASP.NET',         tag:'tag-info' });
+  if (powered.toLowerCase().includes('express')) techs.push({ cat:'Framework',name:'Express.js',      tag:'tag-info' });
+  if (powered.toLowerCase().includes('next'))   techs.push({ cat:'Framework', name:'Next.js',         tag:'tag-info' });
+
+  if (headers['x-drupal-cache'])                techs.push({ cat:'CMS',       name:'Drupal',          tag:'tag-info' });
+  if (headers['x-wp-total'])                    techs.push({ cat:'CMS',       name:'WordPress',       tag:'tag-info' });
+  if (headers['x-shopify-stage'])               techs.push({ cat:'E-commerce',name:'Shopify',         tag:'tag-info' });
+
+  // Security
+  if (headers['strict-transport-security'])     techs.push({ cat:'Seguridad', name:'HSTS',            tag:'tag-ok' });
+  if (headers['content-security-policy'])       techs.push({ cat:'Seguridad', name:'CSP',             tag:'tag-ok' });
+
+  // Group by category
+  const grouped = techs.reduce((acc, t) => {
+    if (!acc[t.cat]) acc[t.cat] = [];
+    acc[t.cat].push(t);
+    return acc;
+  }, {});
+
+  if (!techs.length) {
+    return `<div class="result-block">
+      <div class="result-block-header"><span class="rec-type-badge type-NS">TECHNOLOGIES</span></div>
+      <div class="no-records">No se detectaron tecnologías conocidas en los headers de respuesta.</div>
+    </div>`;
+  }
+
+  let html = `<div class="result-block">
+    <div class="result-block-header">
+      <span class="rec-type-badge type-NS">TECHNOLOGIES</span>
+      <span class="rec-count">${techs.length} detectada${techs.length !== 1 ? 's' : ''}</span>
+    </div>
+    <table class="rec-table"><tbody>`;
+
+  for (const [cat, items] of Object.entries(grouped)) {
+    html += `<tr>
+      <td class="rec-name">${cat.toUpperCase()}</td>
+      <td class="rec-data">${items.map(i => `<span class="tag ${i.tag}">${i.name}</span>`).join(' ')}</td>
+    </tr>`;
+  }
+
+  html += `</tbody></table></div>
+    <div style="font-size:11px;color:var(--text-dim);padding:8px 0">
+      ℹ️ Detección basada en HTTP response headers. Algunas tecnologías pueden no ser detectables.
+    </div>`;
+
+  return html;
+}
+
 // ── RUN TOOL ──────────────────────────────────────────────────────────────────
 async function runTool() {
   const input = document.getElementById('domainInput').value.trim().toLowerCase();
@@ -481,8 +601,14 @@ async function runTool() {
         html = await fetchAndRenderSSL(input, 'full');
       } else if (currentTool === 'ssl-cert') {
         html = await fetchAndRenderSSL(input, 'cert');
-      } else if (currentTool === 'ssl-headers') {
+      }
+    } else if (currentCategory === 'web') {
+      if (currentTool === 'web-headers') {
         html = await fetchSSLHeaders(input);
+      } else if (currentTool === 'web-timing') {
+        html = await fetchWebTiming(input);
+      } else if (currentTool === 'web-tech') {
+        html = await fetchWebTech(input);
       }
     }
 
