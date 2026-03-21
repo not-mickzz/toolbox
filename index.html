@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Network Toolbox</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="logo-box">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>
+    </div>
+    <div class="header-text">
+      <h1>Network Toolbox</h1>
+      <p>DNS · IP · NETWORK ANALYSIS — REAL TIME</p>
+    </div>
+    <div class="header-right">
+      <div class="resolver-row" id="resolverRow">
+        <button class="resolver-btn active" data-resolver="google" onclick="setResolver(this)">🌐 GOOGLE</button>
+        <button class="resolver-btn" data-resolver="cloudflare" onclick="setResolver(this)">🟠 CLOUDFLARE</button>
+      </div>
+      <div class="header-badge">LIVE</div>
+    </div>
+  </header>
+
+  <div id="categoryTabs" class="category-tabs"></div>
+  <div id="toolGrid" class="tool-grid"></div>
+
+  <div class="input-section">
+    <div class="input-label">TARGET</div>
+    <div class="input-row">
+      <input type="text" class="domain-input" id="domainInput" placeholder="ej: google.com, mickzz.xyz"/>
+      <button class="run-btn" id="runBtn" onclick="runTool()">&#9654; EJECUTAR</button>
+    </div>
+    <div class="tool-desc" id="toolDesc"></div>
+    <div class="history-row" id="historyRow"></div>
+  </div>
+
+  <div class="output-section">
+    <div class="output-header">
+      <div class="output-title">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="outputTitle">RESULTADO</span>
+      </div>
+      <button class="copy-btn" onclick="copyResult()">[ COPIAR ]</button>
+    </div>
+    <div class="output-body" id="outputBody">
+      <div class="empty-state">
+        <div class="big-icon">⬡</div>
+        <p>SELECCIONA UNA HERRAMIENTA E INGRESA UN TARGET</p>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <span>NETWORK TOOLBOX — MICKZZ.XYZ</span>
+    <div class="powered">Powered by <span>Cloudflare Workers</span> & <span>IP APIs</span></div>
+  </footer>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>
