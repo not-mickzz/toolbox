@@ -638,28 +638,28 @@ async function fetchWebTech(domain) {
 
 // ── WHOIS ─────────────────────────────────────────────────────────────────────
 async function fetchWhois(domain) {
-  const res = await fetch(`${WORKER_URL}/whois/${encodeURIComponent(domain)}`);
+  const res  = await fetch(`${WORKER_URL}/whois/${encodeURIComponent(domain)}`);
   const data = await res.json();
   if (data.error) throw new Error(data.error);
 
-  // RDAP format
-  const nameservers = (data.nameservers || []).map(n => n.ldhName?.toLowerCase()).filter(Boolean);
-  const events      = data.events || [];
-  const registered  = events.find(e => e.eventAction === 'registration')?.eventDate?.slice(0,10) || '—';
-  const updated     = events.find(e => e.eventAction === 'last changed')?.eventDate?.slice(0,10)  || '—';
-  const expiration  = events.find(e => e.eventAction === 'expiration')?.eventDate?.slice(0,10)    || '—';
-  const registrar   = data.entities?.find(e => e.roles?.includes('registrar'))?.vcardArray?.[1]?.find(v => v[0]==='fn')?.[3] || '—';
-  const registrant  = data.entities?.find(e => e.roles?.includes('registrant'))?.vcardArray?.[1]?.find(v => v[0]==='fn')?.[3] || 'Protegido / No disponible';
+  // whoisjson.com fields
+  const registrar  = data.registrar?.name || data.registrar || '—';
+  const registrant = data.registrant?.name || data.registrant?.organization || 'Protegido / No disponible';
+  const registered = data.created?.slice(0,10)  || '—';
+  const updated    = data.changed?.slice(0,10)   || data.updated?.slice(0,10) || '—';
+  const expiration = data.expires?.slice(0,10)   || '—';
+  const nameservers = (data.nameservers || []);
+  const status     = Array.isArray(data.status) ? data.status : [data.status].filter(Boolean);
 
-  const expDate  = events.find(e => e.eventAction === 'expiration')?.eventDate;
+  const expDate  = data.expires;
   const daysLeft = expDate ? Math.ceil((new Date(expDate) - Date.now()) / 86400000) : null;
   const expTag   = daysLeft !== null
     ? `<span class="tag ${daysLeft > 60 ? 'tag-ok' : daysLeft > 14 ? 'tag-warn' : 'tag-err'}">${daysLeft} días</span>`
     : '';
 
-  const statusTags = (data.status || []).map(s =>
-    `<span class="tag ${s.includes('active') ? 'tag-ok' : 'tag-info'}">${s}</span>`
-  ).join(' ') || '<span class="tag tag-warn">desconocido</span>';
+  const statusTags = status.length
+    ? status.map(s => `<span class="tag ${s.toLowerCase().includes('active') ? 'tag-ok' : 'tag-info'}">${s}</span>`).join(' ')
+    : '<span class="tag tag-warn">desconocido</span>';
 
   return `
     <div class="result-block">
