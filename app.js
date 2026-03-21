@@ -17,7 +17,6 @@ let history         = [];
 
 // ── TOOL CONFIGS ──────────────────────────────────────────────────────────────
 const TOOLS = {
-  // ── DNS ──
   'dns-lookup': {
     category: 'dns', label: 'DNS Lookup', icon: '🔍',
     desc: 'Consulta todos los registros DNS: A, AAAA, MX, NS, TXT, CNAME, SOA, CAA.',
@@ -58,8 +57,6 @@ const TOOLS = {
     desc: 'Compara resultados entre Google DNS y Cloudflare DNS.',
     types: ['A','MX','NS'], multi: true
   },
-
-  // ── IP ──
   'ip-lookup': {
     category: 'ip', label: 'IP Lookup', icon: '🌐',
     desc: 'Geolocalización, ASN, ISP y tipo de IP (residencial, datacenter, VPN).',
@@ -80,7 +77,7 @@ const CATEGORIES = {
   ip:  { label: 'IP Tools',   icon: '◎' },
 };
 
-// ── RENDER CATEGORIES & TOOLS ─────────────────────────────────────────────────
+// ── RENDER NAV ────────────────────────────────────────────────────────────────
 function renderNav() {
   const tabsEl = document.getElementById('categoryTabs');
   tabsEl.innerHTML = Object.entries(CATEGORIES).map(([key, cat]) => `
@@ -112,7 +109,7 @@ function selectCategory(cat) {
   document.getElementById('resolverRow').style.display = cat === 'dns' ? 'flex' : 'none';
   document.getElementById('domainInput').placeholder = cat === 'dns'
     ? 'ej: google.com, mickzz.xyz'
-    : 'ej: 8.8.8.8, 1.1.1.1';
+    : 'ej: 45.161.108.3';
 }
 
 function selectTool(btn) {
@@ -186,10 +183,11 @@ function renderDNSResults(results, domain) {
     }
     html += `</div>`;
   }
-  return html || `<div class="empty-state"><p>SIN REGISTROS PARA ${domain}</p></div>`;
+  if (!total) html = `<div class="empty-state"><p>SIN REGISTROS PARA ${domain}</p></div>`;
+  return html;
 }
 
-// ── IP QUERIES (CORREGIDO PARA IPINFO.IO) ─────────────────────────────────────
+// ── IP LOOKUP (CORREGIDO PARA IPINFO) ─────────────────────────────────────────
 async function fetchIPInfo(ip) {
   const res = await fetch(`https://toolbox.mickzz.workers.dev/ip/${ip}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -197,25 +195,29 @@ async function fetchIPInfo(ip) {
 }
 
 function renderIPLookup(data) {
-  if (data.readme === "https://ipinfo.io/missingauth") {
-    throw new Error("Error de autenticación: Verifica el token en el Worker.");
+  // Verificación de error de la API (missing token)
+  if (data.readme && data.readme.includes("missingauth")) {
+    throw new Error("Token de IPInfo faltante en el Worker.");
   }
 
+  // Mapeo exacto para ipinfo.io
   const ip      = data.ip       || '—';
   const city    = data.city     || '—';
   const region  = data.region   || '—';
   const country = data.country  || '—';
+  const postal  = data.postal   || '—';
   const loc     = data.loc      || '0,0';
   const [lat, lon] = loc.split(',').map(Number);
   const isp     = data.org      || '—';
-  const zip     = data.postal   || '—';
   const tz      = data.timezone || '—';
 
+  // Bandera dinámica
   const flag = country !== '—'
     ? String.fromCodePoint(...[...country.toUpperCase()].map(c => 0x1F1E0 - 65 + c.charCodeAt(0)))
     : '🌐';
 
-  const isDatacenter = ['hosting','cloud','amazon','google','server'].some(k => isp.toLowerCase().includes(k));
+  // Detección simple de Datacenter
+  const isDatacenter = ['hosting','cloud','amazon','google','ovh','digitalocean'].some(k => isp.toLowerCase().includes(k));
 
   return `
     <div class="ip-card">
@@ -226,19 +228,20 @@ function renderIPLookup(data) {
           <div class="ip-location">${city}, ${region}, ${country}</div>
         </div>
         <div style="margin-left:auto">
-            <span class="tag ${isDatacenter ? 'tag-warn' : 'tag-ok'}">${isDatacenter ? 'DATACENTER' : 'RESIDENCIAL'}</span>
+          <span class="tag ${isDatacenter ? 'tag-warn' : 'tag-ok'}">
+            ${isDatacenter ? 'DATACENTER' : 'RESIDENCIAL'}
+          </span>
         </div>
       </div>
       <div class="ip-grid">
         <div class="ip-row"><span class="ip-key">IP</span><span class="ip-val">${ip}</span></div>
-        <div class="ip-row"><span class="ip-key">VERSIÓN</span><span class="ip-val">${ip.includes(':') ? 'IPv6' : 'IPv4'}</span></div>
         <div class="ip-row"><span class="ip-key">PAÍS</span><span class="ip-val">${flag} ${country}</span></div>
         <div class="ip-row"><span class="ip-key">REGIÓN</span><span class="ip-val">${region}</span></div>
         <div class="ip-row"><span class="ip-key">CIUDAD</span><span class="ip-val">${city}</span></div>
-        <div class="ip-row"><span class="ip-key">CÓDIGO POSTAL</span><span class="ip-val">${zip}</span></div>
+        <div class="ip-row"><span class="ip-key">CÓDIGO POSTAL</span><span class="ip-val">${postal}</span></div>
         <div class="ip-row"><span class="ip-key">COORDENADAS</span><span class="ip-val">${lat}, ${lon}</span></div>
         <div class="ip-row"><span class="ip-key">ZONA HORARIA</span><span class="ip-val">${tz}</span></div>
-        <div class="ip-row"><span class="ip-key">ISP</span><span class="ip-val">${isp}</span></div>
+        <div class="ip-row"><span class="ip-key">ISP / ORG</span><span class="ip-val">${isp}</span></div>
       </div>
       <div class="map-container">
         <iframe
@@ -252,29 +255,27 @@ function renderIPLookup(data) {
 
 // ── RUN TOOL ──────────────────────────────────────────────────────────────────
 async function runTool() {
-  const input = document.getElementById('domainInput').value.trim().toLowerCase();
+  const input = document.getElementById('domainInput').value.trim();
   if (!input) { showError('⚠ Ingresa un dominio o IP.'); return; }
 
-  const tool = TOOLS[currentTool];
-  const btn  = document.getElementById('runBtn');
+  const btn = document.getElementById('runBtn');
   btn.disabled = true;
   setStatus('loading');
-  document.getElementById('outputTitle').textContent = tool.label.toUpperCase() + ' — ' + input.toUpperCase();
-  document.getElementById('outputBody').innerHTML = `<div class="loading-text"><div class="spinner"></div>Consultando ${input}...</div>`;
-
-  addToHistory(input);
+  
+  document.getElementById('outputTitle').textContent = TOOLS[currentTool].label.toUpperCase() + ' — ' + input.toUpperCase();
+  document.getElementById('outputBody').innerHTML = `<div class="loading-text"><div class="spinner"></div>Consultando...</div>`;
 
   try {
     let html = '';
     if (currentCategory === 'dns') {
-        const results = await Promise.all(tool.types.map(async type => ({ type, data: await queryDNS(input, type) })));
-        html = renderDNSResults(results, input);
-    } else if (currentCategory === 'ip') {
-      if (currentTool === 'ip-lookup') {
-        const data = await fetchIPInfo(input);
-        html = renderIPLookup(data);
-      }
+      const tool = TOOLS[currentTool];
+      const results = await Promise.all(tool.types.map(async type => ({ type, data: await queryDNS(input, type) })));
+      html = renderDNSResults(results, input);
+    } else {
+      const data = await fetchIPInfo(input);
+      html = renderIPLookup(data);
     }
+    
     document.getElementById('outputBody').innerHTML = html;
     setStatus('active');
   } catch (err) {
@@ -291,36 +292,21 @@ function setResolver(btn) {
   activeResolver = btn.dataset.resolver;
 }
 
-function addToHistory(val) {
-  if (!history.includes(val)) { history.unshift(val); if (history.length > 8) history.pop(); }
-  document.getElementById('historyRow').innerHTML = history.map(d => `<span class="hist-tag" onclick="useDomain('${d}')">↺ ${d}</span>`).join('');
-}
-
-function useDomain(d) {
-  document.getElementById('domainInput').value = d;
-  runTool();
-}
-
-function copyResult() {
-  const text = document.getElementById('outputBody').innerText;
-  if (!text) return;
-  navigator.clipboard.writeText(text).then(() => {
-    const btn = document.querySelector('.copy-btn');
-    btn.textContent = '[ COPIADO ✓ ]';
-    setTimeout(() => btn.textContent = '[ COPIAR ]', 2000);
-  });
-}
-
 function setStatus(state) {
   document.getElementById('statusDot').className = 'status-dot ' + (state || '');
 }
 
 function showError(msg) {
-  document.getElementById('outputBody').innerHTML = `<div style="color:var(--error);padding:20px;white-space:pre-wrap">${msg}</div>`;
+  document.getElementById('outputBody').innerHTML = `<div style="color:var(--error);padding:20px;">${msg}</div>`;
+}
+
+function copyResult() {
+  const text = document.getElementById('outputBody').innerText;
+  navigator.clipboard.writeText(text);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   renderNav();
-  document.getElementById('toolDesc').textContent = TOOLS['dns-lookup'].desc;
+  document.getElementById('toolDesc').textContent = TOOLS[currentTool].desc;
   document.getElementById('domainInput').addEventListener('keydown', e => { if (e.key === 'Enter') runTool(); });
 });
