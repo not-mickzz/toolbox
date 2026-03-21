@@ -17,6 +17,7 @@ let currentCategory = 'dns';
 let currentTool     = 'dns-lookup';
 let activeResolver  = 'google';
 let history         = [];
+const sslCache      = {}; // { domain: sslLabsData } — persiste hasta F5
 
 // ── TOOL CONFIGS ──────────────────────────────────────────────────────────────
 const TOOLS = {
@@ -269,6 +270,9 @@ function renderIPWHOIS(data) {
 
 // ── SSL ───────────────────────────────────────────────────────────────────────
 async function fetchSSLLabsData(domain) {
+  // Return cached result if available
+  if (sslCache[domain]) return sslCache[domain];
+
   // Start analysis via Worker proxy
   await fetch(`${WORKER_URL}/ssl/${encodeURIComponent(domain)}?startNew=on`);
 
@@ -278,10 +282,12 @@ async function fetchSSLLabsData(domain) {
     await new Promise(r => setTimeout(r, 5000));
     const res = await fetch(`${WORKER_URL}/ssl/${encodeURIComponent(domain)}`);
     data = await res.json();
-    // Only stop when READY and certs are present
     if (data.status === 'ERROR') break;
     if (data.status === 'READY' && data.certs?.length) break;
   }
+
+  // Store in cache
+  if (data?.status === 'READY') sslCache[domain] = data;
   return data;
 }
 
@@ -590,12 +596,18 @@ async function runTool() {
       }
     } else if (currentCategory === 'ssl') {
       // Show progress message — SSL Labs can take 60-90s
-      document.getElementById('outputBody').innerHTML = `
+      const cached = sslCache[input];
+      document.getElementById('outputBody').innerHTML = cached ? `
+        <div class="loading-text" style="padding:24px">
+          <div class="spinner"></div>
+          Cargando desde caché...
+        </div>` : `
         <div class="loading-text" style="flex-direction:column;align-items:flex-start;gap:14px;padding:24px">
           <div style="display:flex;align-items:center;gap:10px"><div class="spinner"></div>Analizando SSL de ${input}...</div>
           <div style="font-size:11px;color:var(--text-dim);line-height:1.8">
             ⏳ SSL Labs puede tardar <strong style="color:var(--warn)">60-90 segundos</strong> la primera vez.<br>
-            Esto es normal — está probando protocolos, cipher suites y vulnerabilidades.
+            Esto es normal — está probando protocolos, cipher suites y vulnerabilidades.<br>
+            <span style="color:var(--accent)">💡 El resultado se guardará en caché — cambiar entre SSL Check y Certificado será instantáneo.</span>
           </div>
         </div>`;
 
