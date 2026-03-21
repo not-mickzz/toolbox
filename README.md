@@ -1,6 +1,6 @@
 # 🌐 Network Toolbox
 
-Herramienta web de análisis de red en tiempo real. Sin dependencias, sin costos — consulta directamente a Google DNS, Cloudflare DNS y APIs públicas desde el navegador via Cloudflare Workers.
+Herramienta web de análisis de red en tiempo real. Sin dependencias front-end, sin costos — consulta directamente a Google DNS, Cloudflare DNS y APIs públicas desde el navegador via Cloudflare Workers.
 
 ![Status](https://img.shields.io/badge/status-active-00e5a0?style=flat-square) ![DNS](https://img.shields.io/badge/DNS-Real%20Time-00e5ff?style=flat-square) ![SSL](https://img.shields.io/badge/SSL-SSL%20Labs-7fff00?style=flat-square) ![Web](https://img.shields.io/badge/Web-Analysis-ff6b35?style=flat-square)
 
@@ -21,6 +21,7 @@ Herramienta web de análisis de red en tiempo real. Sin dependencias, sin costos
 | ↪ **CNAME** | Alias y redirecciones |
 | ⚙ **SOA** | Start of Authority: servidor primario, serial, TTL |
 | 🌍 **Propagation** | Compara Google DNS vs Cloudflare DNS lado a lado |
+| 🏷️ **WHOIS** | Registrador, fechas, nameservers y estado del dominio |
 
 ### ◎ IP Tools
 | Herramienta | Descripción |
@@ -54,7 +55,8 @@ Navegador (mickzz.xyz/toolbox)
     └── Via Worker proxy (toolbox.mickzz.workers.dev)
             ├── /ip/:ip        →  ipinfo.io
             ├── /headers/:host →  fetch HEAD del dominio
-            └── /ssl/:host     →  api.ssllabs.com
+            ├── /ssl/:host     →  api.ssllabs.com
+            └── /whois/:domain →  RDAP oficial por TLD
 ```
 
 ---
@@ -70,7 +72,7 @@ toolbox/
 └── README.md
 ```
 
-> `worker.js` se despliega en Cloudflare Workers — no se incluye en el repo.
+> `worker.js` se despliega en Cloudflare Workers — no se incluye en el repo por seguridad.
 
 ---
 
@@ -109,12 +111,14 @@ Activa en **Settings → Pages → Branch: `main` / `/ (root)`**
 | `ipinfo.io` | Geolocalización IP | 50.000 req/mes |
 | `rdap.arin.net` | IP WHOIS | Sin límite |
 | `api.ssllabs.com` | Análisis SSL/TLS | Sin límite (uso justo) |
+| RDAP oficial por TLD | WHOIS de dominios | Sin límite |
 
 ---
 
 ## ⚠️ Notas
 
-- **SSL Check** usa SSL Labs API — puede tardar **60-90 segundos** la primera vez. El resultado se guarda en caché hasta que recargues la página.
+- **SSL Check** usa SSL Labs API — puede tardar **60-90 segundos** la primera vez. El resultado se guarda en caché hasta recargar la página.
+- **WHOIS** soporta: `.com`, `.net`, `.org`, `.xyz`, `.io`, `.dev`, `.app`, `.info`, `.biz`, `.co`, `.me`, `.us`. No soporta `.cl` ya que NIC Chile no tiene RDAP público.
 - Las consultas DNS van directo al navegador sin pasar por el Worker.
 - `worker.js` no está en el repo público por seguridad.
 
@@ -129,9 +133,9 @@ Activa en **Settings → Pages → Branch: `main` / `/ (root)`**
 - [x] HTTP Security Headers
 - [x] Response Time
 - [x] Technology Detection
-- [ ] WHOIS de dominios
+- [x] WHOIS de dominios
 - [ ] Blacklist Check
-- [ ] Ping / Latencia
+- [ ] Más TLDs en WHOIS
 
 ---
 
