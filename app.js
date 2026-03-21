@@ -276,14 +276,22 @@ async function fetchSSLLabsData(domain) {
   // Start analysis via Worker proxy
   await fetch(`${WORKER_URL}/ssl/${encodeURIComponent(domain)}?startNew=on`);
 
-  // Poll until ready — always request all=done
+  // Poll until READY
   let data;
   for (let i = 0; i < 40; i++) {
     await new Promise(r => setTimeout(r, 5000));
     const res = await fetch(`${WORKER_URL}/ssl/${encodeURIComponent(domain)}`);
     data = await res.json();
     if (data.status === 'ERROR') break;
-    if (data.status === 'READY' && data.certs?.length) break;
+    if (data.status === 'READY') break;
+  }
+
+  // If READY but certs missing, do one extra fetch
+  if (data?.status === 'READY' && !data.certs?.length) {
+    await new Promise(r => setTimeout(r, 3000));
+    const res2 = await fetch(`${WORKER_URL}/ssl/${encodeURIComponent(domain)}`);
+    const data2 = await res2.json();
+    if (data2.certs?.length) data = data2;
   }
 
   // Store in cache
