@@ -118,7 +118,8 @@ Activa en **Settings → Pages → Branch: `main` / `/ (root)`**
 ## ⚠️ Notas
 
 - **SSL Check** usa SSL Labs API — puede tardar **60-90 segundos** la primera vez. El resultado se guarda en caché hasta recargar la página.
-- **WHOIS** soporta: `.com`, `.net`, `.org`, `.xyz`, `.io`, `.dev`, `.app`, `.info`, `.biz`, `.co`, `.me`, `.us`. No soporta `.cl` ya que NIC Chile no tiene RDAP público.
+- **WHOIS** soporta: `.com` `.net` `.org` `.xyz` `.io` `.ai` `.dev` `.app` `.info` `.biz` `.co` `.me` `.us` `.uk` `.ca` `.eu` `.de` `.fr` `.br` `.ar` `.mx`
+- **WHOIS .cl** — NIC Chile no tiene RDAP público. Al consultar un `.cl` se muestra un link directo a [nic.cl](https://www.nic.cl/registry/Whois.do).
 - Las consultas DNS van directo al navegador sin pasar por el Worker.
 - `worker.js` no está en el repo público por seguridad.
 
@@ -126,14 +127,14 @@ Activa en **Settings → Pages → Branch: `main` / `/ (root)`**
 
 ## 🗺️ Roadmap
 
-- [x] DNS Lookup completo (8 herramientas)
+- [x] DNS Lookup completo (9 herramientas)
 - [x] IP Geolocalización con mapa
 - [x] IP WHOIS y Reverse DNS
 - [x] SSL/TLS Checker con puntuación
 - [x] HTTP Security Headers
 - [x] Response Time
 - [x] Technology Detection
-- [x] WHOIS de dominios
+- [x] WHOIS de dominios (20+ TLDs)
 - [ ] Blacklist Check
 - [ ] Más TLDs en WHOIS
 
