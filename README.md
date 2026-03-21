@@ -4,7 +4,7 @@ Herramienta web de análisis de red en tiempo real. Sin backend, sin API keys, s
 
 ![Status](https://img.shields.io/badge/status-active-00e5a0?style=flat-square) ![DNS](https://img.shields.io/badge/DNS-Real%20Time-00e5ff?style=flat-square) ![No Backend](https://img.shields.io/badge/backend-none-7fff00?style=flat-square)
 
-🔗 **[dns-toolbox.mickzz.xyz](https://dns-toolbox.mickzz.xyz)**
+🔗 **[https://mickzz.xyz/toolbox/](https://mickzz.xyz/toolbox/)**
 
 ---
 
