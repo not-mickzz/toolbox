@@ -33,11 +33,16 @@ const TOOLS = {
   'ip-lookup':   { category:'ip', label:'IP Lookup',   icon:'🌐', desc:'Geolocalización, ASN, ISP, zona horaria y mapa interactivo.' },
   'ip-whois':    { category:'ip', label:'IP WHOIS',    icon:'📋', desc:'Bloque de red, organización registrante y contacto de abuso.' },
   'reverse-dns': { category:'ip', label:'Reverse DNS', icon:'↩', desc:'Resolución inversa PTR: hostname asociado a una IP.', types:['PTR'] },
+  // SSL
+  'ssl-check':   { category:'ssl', label:'SSL Check',    icon:'🔒', desc:'Análisis completo SSL/TLS con puntuación A+/A/B/C/D/F (via SSL Labs).' },
+  'ssl-cert':    { category:'ssl', label:'Certificado',  icon:'📜', desc:'Detalles del certificado: CA, expiración, SANs, cadena de confianza.' },
+  'ssl-headers': { category:'ssl', label:'HTTP Headers', icon:'🛡️', desc:'Analiza headers de seguridad HTTP: HSTS, CSP, X-Frame-Options y más.' },
 };
 
 const CATEGORIES = {
   dns: { label:'DNS',       icon:'⬡' },
   ip:  { label:'IP Tools',  icon:'◎' },
+  ssl: { label:'SSL / TLS', icon:'🔒' },
 };
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
@@ -65,6 +70,8 @@ function selectCategory(cat) {
   renderNav();
   document.getElementById('resolverRow').style.display = cat === 'dns' ? 'flex' : 'none';
   document.getElementById('domainInput').placeholder = cat === 'dns'
+    ? 'ej: google.com, mickzz.xyz'
+    : cat === 'ssl'
     ? 'ej: google.com, mickzz.xyz'
     : 'ej: 8.8.8.8, 1.1.1.1, 2606:4700::1111';
 }
@@ -256,6 +263,163 @@ function renderIPWHOIS(data) {
   </div>`;
 }
 
+// ── SSL ───────────────────────────────────────────────────────────────────────
+async function fetchSSLLabsData(domain) {
+  // Start analysis
+  const startUrl = `https://api.ssllabs.com/api/v3/analyze?host=${encodeURIComponent(domain)}&startNew=on&all=done`;
+  await fetch(startUrl);
+
+  // Poll until ready
+  let data;
+  for (let i = 0; i < 40; i++) {
+    await new Promise(r => setTimeout(r, 5000));
+    const res = await fetch(`https://api.ssllabs.com/api/v3/analyze?host=${encodeURIComponent(domain)}&all=done`);
+    data = await res.json();
+    if (data.status === 'READY' || data.status === 'ERROR') break;
+  }
+  return data;
+}
+
+function gradeColor(grade) {
+  if (!grade) return 'var(--text-dim)';
+  if (grade.startsWith('A')) return 'var(--success)';
+  if (grade.startsWith('B')) return 'var(--accent)';
+  if (grade.startsWith('C')) return 'var(--warn)';
+  return 'var(--error)';
+}
+
+async function fetchAndRenderSSL(domain, mode) {
+  const data = await fetchSSLLabsData(domain);
+
+  if (data.status === 'ERROR' || !data.endpoints?.length) {
+    return `<div style="color:var(--error);padding:20px">❌ No se pudo analizar ${domain}.<br><span style="font-size:11px;color:var(--text-dim)">${data.statusMessage || 'Verifica que el dominio tenga HTTPS.'}</span></div>`;
+  }
+
+  const ep   = data.endpoints[0];
+  const det  = ep.details || {};
+  const cert = det.cert || det.chain?.certs?.[0] || {};
+  const grade = ep.grade || '?';
+
+  // Dates
+  const notBefore = cert.notBefore ? new Date(cert.notBefore).toLocaleDateString('es-CL') : '—';
+  const notAfter  = cert.notAfter  ? new Date(cert.notAfter).toLocaleDateString('es-CL')  : '—';
+  const daysLeft  = cert.notAfter  ? Math.ceil((cert.notAfter - Date.now()) / 86400000)    : null;
+  const daysTag   = daysLeft !== null
+    ? `<span class="tag ${daysLeft > 30 ? 'tag-ok' : daysLeft > 7 ? 'tag-warn' : 'tag-err'}">${daysLeft} días</span>`
+    : '';
+
+  // Protocols
+  const protos = (det.protocols || []).map(p =>
+    `<span class="tag ${p.name === 'TLS' && p.version >= '1.2' ? 'tag-ok' : 'tag-err'}">${p.name} ${p.version}</span>`
+  ).join(' ');
+
+  // SANs
+  const sans = (cert.altNames || []).slice(0, 8).join(', ') || '—';
+
+  // Vulnerabilities
+  const vulns = [
+    det.heartbleed     ? '❌ Heartbleed'    : '✅ Heartbleed OK',
+    det.poodle         ? '❌ POODLE'        : '✅ POODLE OK',
+    det.freak          ? '❌ FREAK'         : '✅ FREAK OK',
+    det.logjam         ? '❌ LogJam'        : '✅ LogJam OK',
+    det.drownVulnerable? '❌ DROWN'         : '✅ DROWN OK',
+    det.ticketbleed    ? '❌ Ticketbleed'   : '✅ Ticketbleed OK',
+  ];
+
+  // HSTS
+  const hsts = det.hstsPolicy?.status === 'present'
+    ? `<span class="tag tag-ok">HSTS ✓</span>`
+    : `<span class="tag tag-err">HSTS ✗</span>`;
+
+  if (mode === 'cert') {
+    return `
+      <div class="result-block">
+        <div class="result-block-header">
+          <span class="rec-type-badge type-A">CERTIFICADO</span>
+          ${daysTag}
+          <span class="tag ${cert.issues ? 'tag-err' : 'tag-ok'}">${cert.issues ? '⚠ ISSUES' : '✓ VÁLIDO'}</span>
+        </div>
+        <table class="rec-table"><tbody>
+          <tr><td class="rec-name">SUJETO</td><td class="rec-data">${cert.subject || '—'}</td></tr>
+          <tr><td class="rec-name">EMISOR</td><td class="rec-data">${cert.issuerLabel || cert.issuerSubject || '—'}</td></tr>
+          <tr><td class="rec-name">VÁLIDO DESDE</td><td class="rec-data">${notBefore}</td></tr>
+          <tr><td class="rec-name">VÁLIDO HASTA</td><td class="rec-data">${notAfter} ${daysTag}</td></tr>
+          <tr><td class="rec-name">TIPO</td><td class="rec-data">${cert.keyAlg || '—'} ${cert.keySize ? cert.keySize+'bit' : ''}</td></tr>
+          <tr><td class="rec-name">FIRMA</td><td class="rec-data">${cert.sigAlg || '—'}</td></tr>
+          <tr><td class="rec-name">DOMINIOS (SAN)</td><td class="rec-data">${sans}</td></tr>
+          <tr><td class="rec-name">SERIAL</td><td class="rec-data" style="font-size:11px">${cert.serialNumber || '—'}</td></tr>
+        </tbody></table>
+      </div>`;
+  }
+
+  // Full mode
+  return `
+    <div class="ssl-hero">
+      <div class="ssl-grade" style="color:${gradeColor(grade)}">${grade}</div>
+      <div>
+        <div style="font-size:16px;color:var(--text-bright);font-family:'Space Mono',monospace">${domain}</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${ep.ipAddress || ''}</div>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">${hsts} ${protos}</div>
+    </div>
+
+    <div class="result-block" style="margin-top:16px">
+      <div class="result-block-header"><span class="rec-type-badge type-A">CERTIFICADO</span>${daysTag}</div>
+      <table class="rec-table"><tbody>
+        <tr><td class="rec-name">EMISOR</td><td class="rec-data">${cert.issuerLabel || cert.issuerSubject || '—'}</td></tr>
+        <tr><td class="rec-name">VÁLIDO HASTA</td><td class="rec-data">${notAfter} ${daysTag}</td></tr>
+        <tr><td class="rec-name">TIPO</td><td class="rec-data">${cert.keyAlg || '—'} ${cert.keySize ? cert.keySize+'bit' : ''}</td></tr>
+        <tr><td class="rec-name">DOMINIOS</td><td class="rec-data">${sans}</td></tr>
+      </tbody></table>
+    </div>
+
+    <div class="result-block">
+      <div class="result-block-header"><span class="rec-type-badge type-TXT">VULNERABILIDADES</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 0">
+        ${vulns.map(v => `<span class="tag ${v.startsWith('✅') ? 'tag-ok' : 'tag-err'}">${v}</span>`).join('')}
+      </div>
+    </div>`;
+}
+
+async function fetchSSLHeaders(domain) {
+  // Use a CORS proxy to check headers
+  const res = await fetch(`${WORKER_URL}/headers/${encodeURIComponent(domain)}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const headers = await res.json();
+
+  const checks = [
+    { key: 'strict-transport-security', label: 'HSTS',              good: v => !!v },
+    { key: 'content-security-policy',   label: 'CSP',               good: v => !!v },
+    { key: 'x-frame-options',           label: 'X-Frame-Options',   good: v => !!v },
+    { key: 'x-content-type-options',    label: 'X-Content-Type',    good: v => v?.includes('nosniff') },
+    { key: 'referrer-policy',           label: 'Referrer-Policy',   good: v => !!v },
+    { key: 'permissions-policy',        label: 'Permissions-Policy',good: v => !!v },
+    { key: 'x-xss-protection',         label: 'X-XSS-Protection',  good: v => !!v },
+  ];
+
+  const score = checks.filter(c => c.good(headers[c.key])).length;
+  const total = checks.length;
+  const pct   = Math.round(score / total * 100);
+
+  return `
+    <div class="result-block">
+      <div class="result-block-header">
+        <span class="rec-type-badge type-NS">SECURITY HEADERS</span>
+        <span class="tag ${pct >= 80 ? 'tag-ok' : pct >= 50 ? 'tag-warn' : 'tag-err'}">${score}/${total} — ${pct}%</span>
+      </div>
+      <table class="rec-table"><tbody>
+        ${checks.map(c => {
+          const val = headers[c.key];
+          const ok  = c.good(val);
+          return `<tr>
+            <td class="rec-name"><span class="tag ${ok ? 'tag-ok' : 'tag-err'}">${ok ? '✓' : '✗'}</span> ${c.label}</td>
+            <td class="rec-data" style="font-size:11px">${val || '<span style="color:var(--text-dim)">No presente</span>'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody></table>
+    </div>`;
+}
+
 // ── RUN TOOL ──────────────────────────────────────────────────────────────────
 async function runTool() {
   const input = document.getElementById('domainInput').value.trim().toLowerCase();
@@ -292,6 +456,25 @@ async function runTool() {
       } else if (currentTool === 'reverse-dns') {
         const reversed = input.split('.').reverse().join('.') + '.in-addr.arpa';
         html = renderDNSResults([{ type:'PTR', data: await queryDNS(reversed, 'PTR') }], input);
+      }
+    } else if (currentCategory === 'ssl') {
+      // Show progress message — SSL Labs can take 60-90s
+      document.getElementById('outputBody').innerHTML = `
+        <div class="loading-text" style="flex-direction:column;align-items:flex-start;gap:14px;padding:24px">
+          <div style="display:flex;align-items:center;gap:10px"><div class="spinner"></div>Analizando SSL de ${input}...</div>
+          <div style="font-size:11px;color:var(--text-dim);line-height:1.8">
+            ⏳ SSL Labs puede tardar <strong style="color:var(--warn)">60-90 segundos</strong> la primera vez.<br>
+            Esto es normal — está probando protocolos, cipher suites y vulnerabilidades.
+          </div>
+        </div>`;
+
+      if (currentTool === 'ssl-check') {
+        html = await fetchAndRenderSSL(input, 'full');
+      } else if (currentTool === 'ssl-cert') {
+        html = await fetchAndRenderSSL(input, 'cert');
+      } else if (currentTool === 'ssl-headers') {
+        html = await fetchSSLHeaders(input);
+      }
       }
     }
 
