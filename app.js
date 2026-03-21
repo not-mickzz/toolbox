@@ -640,7 +640,14 @@ async function fetchWebTech(domain) {
 async function fetchWhois(domain) {
   const res  = await fetch(`${WORKER_URL}/whois/${encodeURIComponent(domain)}`);
   const data = await res.json();
-  if (data.error) throw new Error(data.error);
+  if (data.error) {
+    // Check if error contains a NIC Chile URL
+    const nicMatch = data.error.match(/https:\/\/www\.nic\.cl[^\s]+/);
+    if (nicMatch) {
+      throw new Error(`${data.error.replace(nicMatch[0], '')} <a href="${nicMatch[0]}" target="_blank" style="color:var(--accent)">Ver en NIC Chile →</a>`);
+    }
+    throw new Error(data.error);
+  }
 
   // RDAP format
   const nameservers = (data.nameservers || []).map(n => n.ldhName?.toLowerCase()).filter(Boolean);
@@ -794,7 +801,7 @@ function copyResult() {
 function setStatus(state) { document.getElementById('statusDot').className = 'status-dot ' + (state||''); }
 function showError(msg) {
   document.getElementById('outputBody').innerHTML =
-    `<div style="color:var(--error);padding:20px;white-space:pre-wrap">${msg}</div>`;
+    `<div style="color:var(--error);padding:20px;white-space:pre-wrap;line-height:1.8">${msg}</div>`;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
