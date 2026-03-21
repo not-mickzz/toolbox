@@ -475,7 +475,6 @@ async function runTool() {
       } else if (currentTool === 'ssl-headers') {
         html = await fetchSSLHeaders(input);
       }
-      }
     }
 
     document.getElementById('outputBody').innerHTML = html;
