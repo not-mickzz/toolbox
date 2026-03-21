@@ -1,10 +1,10 @@
 # 🌐 Network Toolbox
 
-Herramienta web de análisis de red en tiempo real. Sin backend, sin API keys, sin costos — consulta directamente a Google DNS, Cloudflare DNS y APIs públicas de geolocalización.
+Herramienta web de análisis de red en tiempo real. Sin dependencias, sin costos — consulta directamente a Google DNS, Cloudflare DNS, ipinfo.io y SSL Labs desde el navegador via Cloudflare Workers.
 
-![Status](https://img.shields.io/badge/status-active-00e5a0?style=flat-square) ![DNS](https://img.shields.io/badge/DNS-Real%20Time-00e5ff?style=flat-square) ![No Backend](https://img.shields.io/badge/backend-none-7fff00?style=flat-square)
+![Status](https://img.shields.io/badge/status-active-00e5a0?style=flat-square) ![DNS](https://img.shields.io/badge/DNS-Real%20Time-00e5ff?style=flat-square) ![SSL](https://img.shields.io/badge/SSL-SSL%20Labs-7fff00?style=flat-square)
 
-🔗 **[https://mickzz.xyz/toolbox/](https://mickzz.xyz/toolbox/)**
+🔗 **[mickzz.xyz/toolbox](https://mickzz.xyz/toolbox)**
 
 ---
 
@@ -25,57 +25,72 @@ Herramienta web de análisis de red en tiempo real. Sin backend, sin API keys, s
 ### ◎ IP Tools
 | Herramienta | Descripción |
 |---|---|
-| 🌐 **IP Lookup** | Geolocalización, ISP, zona horaria, moneda, mapa interactivo |
+| 🌐 **IP Lookup** | Geolocalización, ISP, ASN, zona horaria, mapa interactivo |
 | 📋 **IP WHOIS** | Bloque de red, organización registrante, contacto de abuso |
 | ↩ **Reverse DNS** | Hostname asociado a una IP (registro PTR) |
+
+### 🔒 SSL / TLS
+| Herramienta | Descripción |
+|---|---|
+| 🔒 **SSL Check** | Análisis completo con puntuación A+/A/B/C/D/F via SSL Labs |
+| 📜 **Certificado** | CA emisora, fechas, días restantes, SANs, algoritmo |
+| 🛡️ **HTTP Headers** | HSTS, CSP, X-Frame-Options, Referrer-Policy y más |
 
 ---
 
 ## 🏗️ Arquitectura
 
 ```
-Navegador
+Navegador (mickzz.xyz/toolbox)
     │
-    ├── DNS queries  → dns.google / cloudflare-dns.com (DoH)
+    ├── DNS queries     →  dns.google / cloudflare-dns.com (DoH, directo)
     │
-    └── IP queries   → freeipapi.com / rdap.arin.net
+    └── Via Worker proxy (toolbox.mickzz.workers.dev)
+            ├── /ip/:ip        →  ipinfo.io
+            ├── /headers/:host →  fetch HEAD del dominio
+            └── /ssl/:host     →  api.ssllabs.com
 ```
-
-Sin servidor intermedio. Todo directo desde el navegador.
 
 ---
 
 ## 📁 Estructura
 
 ```
-dns-toolbox/
+toolbox/
 ├── index.html    # Estructura HTML
 ├── styles.css    # Estilos (tema oscuro navy)
-├── app.js        # Lógica DNS + IP
+├── app.js        # Lógica DNS + IP + SSL
 ├── favicon.svg   # Ícono
 └── README.md
 ```
+
+> `worker.js` se despliega en Cloudflare Workers — no se incluye en el repo.
 
 ---
 
 ## 🚀 Deploy
 
-### GitHub Pages
+### 1. Cloudflare Worker
 
-Activa en **Settings → Pages → Branch: `main` / `/ (root)`**
+1. Ve a [dash.cloudflare.com](https://dash.cloudflare.com) → Workers & Pages → Create
+2. Nómbralo `toolbox` y pega el contenido de `worker.js`
+3. En **Settings → Variables and Secrets** agrega:
 
-Disponible en: `https://not-mickzz.github.io/dns-toolbox/`
+| Variable | Valor | Tipo |
+|---|---|---|
+| `IPINFO_TOKEN` | tu token de ipinfo.io | Secret |
 
-### Local
+4. Deploy → la URL será `https://toolbox.mickzz.workers.dev`
+
+### 2. GitHub Pages
 
 ```bash
-# Python (recomendado — evita problemas de CORS)
-python3 -m http.server 8080
+git add .
+git commit -m "feat: Network Toolbox"
+git push
 ```
 
-Abre `http://localhost:8080`
-
-> ⚠️ No abras `index.html` directo como archivo (`file://`) — el navegador bloqueará las llamadas externas por CORS.
+Activa en **Settings → Pages → Branch: `main` / `/ (root)`**
 
 ---
 
@@ -85,17 +100,29 @@ Abre `http://localhost:8080`
 |---|---|---|
 | `dns.google` | Consultas DNS | Sin límite |
 | `cloudflare-dns.com` | Consultas DNS | Sin límite |
-| `freeipapi.com` | Geolocalización IP | 60 req/min |
+| `ipinfo.io` | Geolocalización IP | 50.000 req/mes |
 | `rdap.arin.net` | IP WHOIS | Sin límite |
+| `api.ssllabs.com` | Análisis SSL/TLS | Sin límite (uso justo) |
 
 ---
 
-## 🗺️ Próximas herramientas
+## ⚠️ Notas
 
-- [ ] HTTP Headers
-- [ ] SSL/TLS Checker  
+- **SSL Check** usa SSL Labs API — puede tardar **60-90 segundos** la primera vez que analiza un dominio nuevo. Es normal.
+- Las consultas DNS van directo al navegador sin pasar por el Worker.
+- `worker.js` no está en el repo público por seguridad.
+
+---
+
+## 🗺️ Roadmap
+
+- [x] DNS Lookup completo
+- [x] IP Geolocalización con mapa
+- [x] SSL/TLS Checker con puntuación
+- [x] HTTP Security Headers
 - [ ] WHOIS de dominios
-- [ ] Ping / Traceroute
+- [ ] Ping / Latencia
+- [ ] Blacklist Check
 
 ---
 
