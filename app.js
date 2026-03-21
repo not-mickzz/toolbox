@@ -265,15 +265,14 @@ function renderIPWHOIS(data) {
 
 // ── SSL ───────────────────────────────────────────────────────────────────────
 async function fetchSSLLabsData(domain) {
-  // Start analysis
-  const startUrl = `https://api.ssllabs.com/api/v3/analyze?host=${encodeURIComponent(domain)}&startNew=on&all=done`;
-  await fetch(startUrl);
+  // Start analysis via Worker proxy
+  await fetch(`${WORKER_URL}/ssl/${encodeURIComponent(domain)}?startNew=on`);
 
   // Poll until ready
   let data;
   for (let i = 0; i < 40; i++) {
     await new Promise(r => setTimeout(r, 5000));
-    const res = await fetch(`https://api.ssllabs.com/api/v3/analyze?host=${encodeURIComponent(domain)}&all=done`);
+    const res = await fetch(`${WORKER_URL}/ssl/${encodeURIComponent(domain)}`);
     data = await res.json();
     if (data.status === 'READY' || data.status === 'ERROR') break;
   }
