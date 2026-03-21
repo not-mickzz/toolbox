@@ -453,6 +453,73 @@ async function fetchSSLHeaders(domain) {
     </div>`;
 }
 
+async function fetchCertInfo(domain) {
+  const res = await fetch(`${WORKER_URL}/cert/${encodeURIComponent(domain)}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const certs = await res.json();
+
+  if (!certs?.length) return `<div style="color:var(--text-dim);padding:20px">Sin certificados encontrados para ${domain}</div>`;
+
+  // Get the most recent valid cert (not expired, not pre-cert)
+  const now = Date.now();
+  const valid = certs
+    .filter(c => !c.name_value?.includes('*.') || c.name_value?.includes(domain))
+    .filter(c => new Date(c.not_after).getTime() > now)
+    .sort((a, b) => new Date(b.not_before) - new Date(a.not_before));
+
+  const cert = valid[0] || certs[0];
+
+  const notBefore = cert.not_before ? new Date(cert.not_before).toLocaleDateString('es-CL') : '—';
+  const notAfter  = cert.not_after  ? new Date(cert.not_after).toLocaleDateString('es-CL')  : '—';
+  const daysLeft  = cert.not_after  ? Math.ceil((new Date(cert.not_after) - now) / 86400000) : null;
+  const daysTag   = daysLeft !== null
+    ? `<span class="tag ${daysLeft > 30 ? 'tag-ok' : daysLeft > 7 ? 'tag-warn' : 'tag-err'}">${daysLeft} días</span>`
+    : '';
+
+  const issuer   = cert.issuer_name?.match(/CN=([^,]+)/)?.[1] || cert.issuer_name || '—';
+  const subject  = cert.name_value || cert.common_name || '—';
+  const sans     = cert.name_value?.split('\n').slice(0, 8).join(', ') || '—';
+
+  // Count total active certs
+  const activeCerts = certs.filter(c => new Date(c.not_after).getTime() > now).length;
+
+  return `
+    <div class="result-block">
+      <div class="result-block-header">
+        <span class="rec-type-badge type-A">CERTIFICADO ACTIVO</span>
+        ${daysTag}
+        <span class="tag tag-ok">✓ VÁLIDO</span>
+        <span class="rec-count">${activeCerts} cert${activeCerts !== 1 ? 's' : ''} activo${activeCerts !== 1 ? 's' : ''}</span>
+      </div>
+      <table class="rec-table"><tbody>
+        <tr><td class="rec-name">SUJETO</td><td class="rec-data">${subject}</td></tr>
+        <tr><td class="rec-name">EMISOR</td><td class="rec-data">${issuer}</td></tr>
+        <tr><td class="rec-name">VÁLIDO DESDE</td><td class="rec-data">${notBefore}</td></tr>
+        <tr><td class="rec-name">VÁLIDO HASTA</td><td class="rec-data">${notAfter} ${daysTag}</td></tr>
+        <tr><td class="rec-name">DOMINIOS (SAN)</td><td class="rec-data">${sans}</td></tr>
+        <tr><td class="rec-name">ID</td><td class="rec-data" style="font-size:11px">${cert.id || '—'}</td></tr>
+      </tbody></table>
+    </div>
+
+    ${valid.length > 1 ? `
+    <div class="result-block">
+      <div class="result-block-header">
+        <span class="rec-type-badge type-NS">HISTORIAL RECIENTE</span>
+        <span class="rec-count">${valid.length} certificados activos</span>
+      </div>
+      <table class="rec-table">
+        <thead><tr><th>EMISOR</th><th>DESDE</th><th>HASTA</th></tr></thead>
+        <tbody>
+          ${valid.slice(0, 5).map(c => `<tr>
+            <td class="rec-data">${c.issuer_name?.match(/CN=([^,]+)/)?.[1] || '—'}</td>
+            <td class="rec-ttl">${new Date(c.not_before).toLocaleDateString('es-CL')}</td>
+            <td class="rec-ttl">${new Date(c.not_after).toLocaleDateString('es-CL')}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>` : ''}`;
+}
+
 // ── WEB ───────────────────────────────────────────────────────────────────────
 async function fetchWebTiming(domain) {
   const start = performance.now();
@@ -502,15 +569,14 @@ async function fetchWebTech(domain) {
 
   // Server
   const server = headers['server'] || '';
-  if (server.toLowerCase().includes('nginx'))   techs.push({ cat:'Servidor',  name:'Nginx',           tag:'tag-ok' });
-  if (server.toLowerCase().includes('apache'))  techs.push({ cat:'Servidor',  name:'Apache',          tag:'tag-ok' });
-  if (server.toLowerCase().includes('caddy'))   techs.push({ cat:'Servidor',  name:'Caddy',           tag:'tag-ok' });
-  if (server.toLowerCase().includes('iis'))     techs.push({ cat:'Servidor',  name:'IIS (Microsoft)', tag:'tag-info' });
-  if (server.toLowerCase().includes('cloudflare')) techs.push({ cat:'CDN',    name:'Cloudflare',      tag:'tag-ok' });
-  if (server.toLowerCase().includes('openresty')) techs.push({ cat:'Servidor',name:'OpenResty',       tag:'tag-ok' });
-
-  // CDN / Proxy
-  if (headers['cf-ray'])                        techs.push({ cat:'CDN',       name:'Cloudflare',      tag:'tag-ok' });
+  if (server.toLowerCase().includes('nginx'))      techs.push({ cat:'Servidor',  name:'Nginx',           tag:'tag-ok' });
+  if (server.toLowerCase().includes('apache'))     techs.push({ cat:'Servidor',  name:'Apache',          tag:'tag-ok' });
+  if (server.toLowerCase().includes('caddy'))      techs.push({ cat:'Servidor',  name:'Caddy',           tag:'tag-ok' });
+  if (server.toLowerCase().includes('iis'))        techs.push({ cat:'Servidor',  name:'IIS (Microsoft)', tag:'tag-info' });
+  if (server.toLowerCase().includes('openresty'))  techs.push({ cat:'Servidor',  name:'OpenResty',       tag:'tag-ok' });
+  // Cloudflare — detected once via cf-ray or server header (not both)
+  const isCloudflare = headers['cf-ray'] || server.toLowerCase().includes('cloudflare');
+  if (isCloudflare) techs.push({ cat:'CDN', name:'Cloudflare', tag:'tag-ok' });
   if (headers['x-amz-cf-id'])                   techs.push({ cat:'CDN',       name:'AWS CloudFront',  tag:'tag-ok' });
   if (headers['x-azure-ref'])                   techs.push({ cat:'CDN',       name:'Azure CDN',       tag:'tag-ok' });
   if (headers['x-fastly-request-id'])           techs.push({ cat:'CDN',       name:'Fastly',          tag:'tag-ok' });
@@ -609,7 +675,11 @@ async function runTool() {
     } else if (currentCategory === 'ssl') {
       // Show progress message — SSL Labs can take 60-90s
       const cached = sslCache[input];
-      document.getElementById('outputBody').innerHTML = cached ? `
+      document.getElementById('outputBody').innerHTML = currentTool === 'ssl-cert' ? `
+        <div class="loading-text" style="padding:24px">
+          <div class="spinner"></div>
+          Consultando certificado de ${input}...
+        </div>` : cached ? `
         <div class="loading-text" style="padding:24px">
           <div class="spinner"></div>
           Cargando desde caché...
@@ -619,14 +689,14 @@ async function runTool() {
           <div style="font-size:11px;color:var(--text-dim);line-height:1.8">
             ⏳ SSL Labs puede tardar <strong style="color:var(--warn)">60-90 segundos</strong> la primera vez.<br>
             Esto es normal — está probando protocolos, cipher suites y vulnerabilidades.<br>
-            <span style="color:var(--accent)">💡 El resultado se guardará en caché — cambiar entre SSL Check y Certificado será instantáneo.</span>
+            <span style="color:var(--accent)">💡 El resultado se guardará en caché para consultas posteriores.</span>
           </div>
         </div>`;
 
       if (currentTool === 'ssl-check') {
         html = await fetchAndRenderSSL(input, 'full');
       } else if (currentTool === 'ssl-cert') {
-        html = await fetchAndRenderSSL(input, 'cert');
+        html = await fetchCertInfo(input);
       }
     } else if (currentCategory === 'web') {
       if (currentTool === 'web-headers') {
