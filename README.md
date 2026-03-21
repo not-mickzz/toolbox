@@ -1,8 +1,8 @@
 # 🌐 Network Toolbox
 
-Herramienta web de análisis de red en tiempo real. Sin dependencias, sin costos — consulta directamente a Google DNS, Cloudflare DNS, ipinfo.io y SSL Labs desde el navegador via Cloudflare Workers.
+Herramienta web de análisis de red en tiempo real. Sin dependencias, sin costos — consulta directamente a Google DNS, Cloudflare DNS y APIs públicas desde el navegador via Cloudflare Workers.
 
-![Status](https://img.shields.io/badge/status-active-00e5a0?style=flat-square) ![DNS](https://img.shields.io/badge/DNS-Real%20Time-00e5ff?style=flat-square) ![SSL](https://img.shields.io/badge/SSL-SSL%20Labs-7fff00?style=flat-square)
+![Status](https://img.shields.io/badge/status-active-00e5a0?style=flat-square) ![DNS](https://img.shields.io/badge/DNS-Real%20Time-00e5ff?style=flat-square) ![SSL](https://img.shields.io/badge/SSL-SSL%20Labs-7fff00?style=flat-square) ![Web](https://img.shields.io/badge/Web-Analysis-ff6b35?style=flat-square)
 
 🔗 **[mickzz.xyz/toolbox](https://mickzz.xyz/toolbox)**
 
@@ -34,7 +34,13 @@ Herramienta web de análisis de red en tiempo real. Sin dependencias, sin costos
 |---|---|
 | 🔒 **SSL Check** | Análisis completo con puntuación A+/A/B/C/D/F via SSL Labs |
 | 📜 **Certificado** | CA emisora, fechas, días restantes, SANs, algoritmo |
-| 🛡️ **HTTP Headers** | HSTS, CSP, X-Frame-Options, Referrer-Policy y más |
+
+### 🌍 Web
+| Herramienta | Descripción |
+|---|---|
+| 🛡️ **HTTP Headers** | Verifica headers de seguridad: HSTS, CSP, X-Frame-Options y más |
+| ⚡ **Response Time** | Tiempo de respuesta, servidor, CDN y cache-control |
+| 🔬 **Technologies** | Detecta CDN, hosting, CMS, frameworks y librerías |
 
 ---
 
@@ -59,7 +65,7 @@ Navegador (mickzz.xyz/toolbox)
 toolbox/
 ├── index.html    # Estructura HTML
 ├── styles.css    # Estilos (tema oscuro navy)
-├── app.js        # Lógica DNS + IP + SSL
+├── app.js        # Lógica DNS + IP + SSL + Web
 ├── favicon.svg   # Ícono
 └── README.md
 ```
@@ -108,7 +114,7 @@ Activa en **Settings → Pages → Branch: `main` / `/ (root)`**
 
 ## ⚠️ Notas
 
-- **SSL Check** usa SSL Labs API — puede tardar **60-90 segundos** la primera vez que analiza un dominio nuevo. Es normal.
+- **SSL Check** usa SSL Labs API — puede tardar **60-90 segundos** la primera vez. El resultado se guarda en caché hasta que recargues la página.
 - Las consultas DNS van directo al navegador sin pasar por el Worker.
 - `worker.js` no está en el repo público por seguridad.
 
@@ -116,13 +122,16 @@ Activa en **Settings → Pages → Branch: `main` / `/ (root)`**
 
 ## 🗺️ Roadmap
 
-- [x] DNS Lookup completo
+- [x] DNS Lookup completo (8 herramientas)
 - [x] IP Geolocalización con mapa
+- [x] IP WHOIS y Reverse DNS
 - [x] SSL/TLS Checker con puntuación
 - [x] HTTP Security Headers
+- [x] Response Time
+- [x] Technology Detection
 - [ ] WHOIS de dominios
-- [ ] Ping / Latencia
 - [ ] Blacklist Check
+- [ ] Ping / Latencia
 
 ---
 
