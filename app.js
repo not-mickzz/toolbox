@@ -223,7 +223,8 @@ function renderPropagation(gRes, cRes) {
 
 // ── IP QUERIES ────────────────────────────────────────────────────────────────
 async function fetchIPInfo(ip) {
-  const res = await fetch(`https://freeipapi.com/api/json/${ip}`);
+  // Usa el Worker como proxy para evitar CORS
+  const res = await fetch(`https://toolbox.mickzz.workers.dev/ip/${ip}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return await res.json();
 }
