@@ -273,7 +273,7 @@ async function fetchSSLLabsData(domain) {
   // Return cached result if available
   if (sslCache[domain]) return sslCache[domain];
 
-  // Start analysis via Worker proxy
+  // Start new analysis
   await fetch(`${WORKER_URL}/ssl/${encodeURIComponent(domain)}?startNew=on`);
 
   // Poll until READY
@@ -286,16 +286,18 @@ async function fetchSSLLabsData(domain) {
     if (data.status === 'READY') break;
   }
 
-  // If READY but certs missing, do one extra fetch
-  if (data?.status === 'READY' && !data.certs?.length) {
-    await new Promise(r => setTimeout(r, 3000));
-    const res2 = await fetch(`${WORKER_URL}/ssl/${encodeURIComponent(domain)}`);
-    const data2 = await res2.json();
-    if (data2.certs?.length) data = data2;
+  // SSL Labs sometimes returns READY without certs[] on first fetch.
+  // Do up to 3 extra fetches until certs arrive.
+  if (data?.status === 'READY') {
+    for (let i = 0; i < 3 && !data.certs?.length; i++) {
+      await new Promise(r => setTimeout(r, 3000));
+      const res = await fetch(`${WORKER_URL}/ssl/${encodeURIComponent(domain)}`);
+      const fresh = await res.json();
+      if (fresh.certs?.length) data = fresh;
+    }
+    sslCache[domain] = data;
   }
 
-  // Store in cache
-  if (data?.status === 'READY') sslCache[domain] = data;
   return data;
 }
 
@@ -317,9 +319,11 @@ async function fetchAndRenderSSL(domain, mode) {
   const ep   = data.endpoints[0];
   const det  = ep.details || {};
 
-  // SSL Labs stores certs at root level in data.certs[], referenced by ID from certChains
-  const certId = det.certChains?.[0]?.certIds?.[0];
-  const cert = (data.certs || []).find(c => c.id === certId) || (data.certs || [])[0] || {};
+  // certChains[0].certIds[0] is the leaf cert ID — find it in data.certs[]
+  const leafCertId = det.certChains?.[0]?.certIds?.[0];
+  const cert = leafCertId
+    ? (data.certs || []).find(c => c.id === leafCertId) || (data.certs || [])[0] || {}
+    : (data.certs || [])[0] || {};
 
   const grade = ep.grade || '?';
 
