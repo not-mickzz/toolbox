@@ -30,6 +30,7 @@ const TOOLS = {
   'cname-check': { category:'dns', label:'CNAME',       icon:'↪', desc:'Alias y redirecciones de dominio.', types:['CNAME'] },
   'soa-check':   { category:'dns', label:'SOA',         icon:'⚙', desc:'Start of Authority: servidor primario, serial, TTL.', types:['SOA'] },
   'propagation': { category:'dns', label:'Propagation', icon:'🌍', desc:'Compara Google DNS vs Cloudflare DNS lado a lado.', types:['A','MX','NS'], multi:true },
+  'whois':       { category:'dns', label:'WHOIS',       icon:'🏷️', desc:'Información de registro del dominio: registrador, fechas, nameservers y estado.' },
   // IP
   'ip-lookup':   { category:'ip', label:'IP Lookup',   icon:'🌐', desc:'Geolocalización, ASN, ISP, zona horaria y mapa interactivo.' },
   'ip-whois':    { category:'ip', label:'IP WHOIS',    icon:'📋', desc:'Bloque de red, organización registrante y contacto de abuso.' },
@@ -635,6 +636,53 @@ async function fetchWebTech(domain) {
   return html;
 }
 
+// ── WHOIS ─────────────────────────────────────────────────────────────────────
+async function fetchWhois(domain) {
+  // Use Worker proxy → who-dat.as93.net (supports .cl and most TLDs)
+  const res = await fetch(`${WORKER_URL}/whois/${encodeURIComponent(domain)}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+
+  if (data.error) throw new Error(data.error);
+
+  const nameservers = (data.nameservers || []).map(n => n.toLowerCase());
+  const registered  = data.createdDate?.slice(0,10)  || data.created?.slice(0,10)  || '—';
+  const updated     = data.updatedDate?.slice(0,10)   || data.updated?.slice(0,10)  || '—';
+  const expiration  = data.expiresDate?.slice(0,10)   || data.expires?.slice(0,10)  || '—';
+  const registrar   = data.registrar  || '—';
+  const registrant  = data.registrantName || data.registrantOrganization || 'Protegido / No disponible';
+  const status      = Array.isArray(data.status) ? data.status : [data.status].filter(Boolean);
+
+  const expDate  = data.expiresDate || data.expires;
+  const daysLeft = expDate ? Math.ceil((new Date(expDate) - Date.now()) / 86400000) : null;
+  const expTag   = daysLeft !== null
+    ? `<span class="tag ${daysLeft > 60 ? 'tag-ok' : daysLeft > 14 ? 'tag-warn' : 'tag-err'}">${daysLeft} días</span>`
+    : '';
+
+  const statusTags = status.length
+    ? status.map(s => `<span class="tag ${s.toLowerCase().includes('active') ? 'tag-ok' : 'tag-info'}">${s}</span>`).join(' ')
+    : '<span class="tag tag-warn">desconocido</span>';
+
+  return `
+    <div class="result-block">
+      <div class="result-block-header">
+        <span class="rec-type-badge type-NS">WHOIS</span>
+        <span class="rec-count">${domain}</span>
+        ${expTag}
+      </div>
+      <table class="rec-table"><tbody>
+        <tr><td class="rec-name">DOMINIO</td><td class="rec-data">${domain}</td></tr>
+        <tr><td class="rec-name">REGISTRADOR</td><td class="rec-data">${registrar}</td></tr>
+        <tr><td class="rec-name">REGISTRANTE</td><td class="rec-data">${registrant}</td></tr>
+        <tr><td class="rec-name">REGISTRADO</td><td class="rec-data">${registered}</td></tr>
+        <tr><td class="rec-name">ACTUALIZADO</td><td class="rec-data">${updated}</td></tr>
+        <tr><td class="rec-name">EXPIRA</td><td class="rec-data">${expiration} ${expTag}</td></tr>
+        <tr><td class="rec-name">ESTADO</td><td class="rec-data">${statusTags}</td></tr>
+        <tr><td class="rec-name">NAMESERVERS</td><td class="rec-data">${nameservers.join('<br>') || '—'}</td></tr>
+      </tbody></table>
+    </div>`;
+}
+
 // ── RUN TOOL ──────────────────────────────────────────────────────────────────
 async function runTool() {
   const input = document.getElementById('domainInput').value.trim().toLowerCase();
@@ -659,6 +707,8 @@ async function runTool() {
           Promise.all(tool.types.map(async t => ({ type:t, data: await queryDNS(input, t, 'cloudflare') })))
         ]);
         html = renderPropagation(g, c);
+      } else if (currentTool === 'whois') {
+        html = await fetchWhois(input);
       } else {
         const results = await Promise.all(tool.types.map(async type => ({ type, data: await queryDNS(input, type) })));
         html = renderDNSResults(results, input);
