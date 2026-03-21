@@ -297,9 +297,9 @@ async function fetchAndRenderSSL(domain, mode) {
   const ep   = data.endpoints[0];
   const det  = ep.details || {};
 
-  // SSL Labs stores certs in details.certChains[0].certIds -> details.certs[]
+  // SSL Labs stores certs at root level in data.certs[], referenced by ID from certChains
   const certId = det.certChains?.[0]?.certIds?.[0];
-  const cert = det.certs?.find(c => c.id === certId) || det.certs?.[0] || {};
+  const cert = (data.certs || []).find(c => c.id === certId) || (data.certs || [])[0] || {};
 
   const grade = ep.grade || '?';
 
@@ -316,11 +316,11 @@ async function fetchAndRenderSSL(domain, mode) {
     `<span class="tag ${p.name === 'TLS' && parseFloat(p.version) >= 1.2 ? 'tag-ok' : 'tag-err'}">${p.name} ${p.version}</span>`
   ).join(' ');
 
-  // SANs — SSL Labs stores them in cert.dnsCaa or cert.altNames
-  const sans = (cert.altNames || cert.commonNames || []).slice(0, 8).join(', ') || cert.subject || '—';
+  // SANs
+  const sans = (cert.altNames || cert.commonNames || []).slice(0, 8).join(', ') || '—';
 
-  // Issuer
-  const issuer = cert.issuerLabel || cert.issuerSubject || '—';
+  // Issuer — SSL Labs uses issuerSubject
+  const issuer = cert.issuerSubject?.match(/CN=([^,]+)/)?.[1] || cert.issuerSubject || '—';
 
   // Key info
   const keyInfo = [cert.keyAlg, cert.keySize ? cert.keySize + 'bit' : ''].filter(Boolean).join(' ') || '—';
