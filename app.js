@@ -189,9 +189,9 @@ function renderIPLookup(data) {
   const coords  = data.loc      || '0,0';
   const [lat, lon] = coords.split(',').map(Number);
 
-  // Country flag from 2-letter code
+  // Country flag using flagcdn.com
   const flag = country && country.length === 2
-    ? String.fromCodePoint(...[...country.toUpperCase()].map(c => 0x1F1E0 - 65 + c.charCodeAt(0)))
+    ? `<img src="https://flagcdn.com/24x18/${country.toLowerCase()}.png" alt="${country}" style="vertical-align:middle;margin-right:4px;">`
     : '🌐';
 
   const orgLower = org.toLowerCase();
@@ -203,7 +203,7 @@ function renderIPLookup(data) {
   return `
     <div class="ip-card">
       <div class="ip-hero">
-        <div class="ip-flag">${flag}</div>
+        <div class="ip-flag">${country && country.length === 2 ? `<img src="https://flagcdn.com/48x36/${country.toLowerCase()}.png" alt="${country}" style="width:48px;">` : '🌐'}</div>
         <div>
           <div class="ip-address">${ip}</div>
           <div class="ip-location">${city}, ${region}, ${country}</div>
