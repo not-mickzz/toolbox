@@ -2,7 +2,7 @@
 
 Herramienta web de análisis de red en tiempo real. Sin dependencias front-end, sin costos — consulta directamente a Google DNS, Cloudflare DNS y APIs públicas desde el navegador via Cloudflare Workers.
 
-![Status](https://img.shields.io/badge/status-active-00e5a0?style=flat-square) ![DNS](https://img.shields.io/badge/DNS-Real%20Time-00e5ff?style=flat-square) ![SSL](https://img.shields.io/badge/SSL-SSL%20Labs-7fff00?style=flat-square) ![Web](https://img.shields.io/badge/Web-Analysis-ff6b35?style=flat-square)
+![Status](https://img.shields.io/badge/status-active-00e5a0?style=flat-square) ![DNS](https://img.shields.io/badge/DNS-Real%20Time-00e5ff?style=flat-square) ![SSL](https://img.shields.io/badge/SSL-SSL%20Labs-7fff00?style=flat-square) ![Web](https://img.shields.io/badge/Web-Analysis-ff6b35?style=flat-square) ![Security](https://img.shields.io/badge/Security-DNSBL-ff4455?style=flat-square)
 
 🔗 **[mickzz.xyz/toolbox](https://mickzz.xyz/toolbox)**
 
@@ -43,6 +43,11 @@ Herramienta web de análisis de red en tiempo real. Sin dependencias front-end, 
 | ⚡ **Response Time** | Tiempo de respuesta, servidor, CDN y cache-control |
 | 🔬 **Technologies** | Detecta CDN, hosting, CMS, frameworks y librerías |
 
+### 🚫 Security
+| Herramienta | Descripción |
+|---|---|
+| 🚫 **Blacklist Check** | Verifica si una IP está en 10 listas negras de spam y malware (DNSBL) |
+
 ---
 
 ## 🏗️ Arquitectura
@@ -50,7 +55,8 @@ Herramienta web de análisis de red en tiempo real. Sin dependencias front-end, 
 ```
 Navegador (mickzz.xyz/toolbox)
     │
-    ├── DNS queries     →  dns.google / cloudflare-dns.com (DoH, directo)
+    ├── DNS queries      →  dns.google / cloudflare-dns.com (DoH, directo)
+    ├── DNSBL queries    →  dns.google (DoH, directo — sin backend)
     │
     └── Via Worker proxy (toolbox.mickzz.workers.dev)
             ├── /ip/:ip        →  ipinfo.io
@@ -67,7 +73,7 @@ Navegador (mickzz.xyz/toolbox)
 toolbox/
 ├── index.html    # Estructura HTML
 ├── styles.css    # Estilos (tema oscuro navy)
-├── app.js        # Lógica DNS + IP + SSL + Web
+├── app.js        # Lógica DNS + IP + SSL + Web + Security
 ├── favicon.svg   # Ícono
 └── README.md
 ```
@@ -106,12 +112,13 @@ Activa en **Settings → Pages → Branch: `main` / `/ (root)`**
 
 | API | Uso | Límite gratuito |
 |---|---|---|
-| `dns.google` | Consultas DNS | Sin límite |
+| `dns.google` | Consultas DNS + DNSBL | Sin límite |
 | `cloudflare-dns.com` | Consultas DNS | Sin límite |
 | `ipinfo.io` | Geolocalización IP | 50.000 req/mes |
 | `rdap.arin.net` | IP WHOIS | Sin límite |
 | `api.ssllabs.com` | Análisis SSL/TLS | Sin límite (uso justo) |
 | RDAP oficial por TLD | WHOIS de dominios | Sin límite |
+| DNSBL (10 listas) | Blacklist Check | Sin límite |
 
 ---
 
@@ -120,6 +127,7 @@ Activa en **Settings → Pages → Branch: `main` / `/ (root)`**
 - **SSL Check** usa SSL Labs API — puede tardar **60-90 segundos** la primera vez. El resultado se guarda en caché hasta recargar la página.
 - **WHOIS** soporta: `.com` `.net` `.org` `.xyz` `.io` `.ai` `.dev` `.app` `.info` `.biz` `.co` `.me` `.us` `.uk` `.ca` `.eu` `.de` `.fr` `.br` `.ar` `.mx`
 - **WHOIS .cl** — NIC Chile no tiene RDAP público. Al consultar un `.cl` se muestra un link directo a [nic.cl](https://www.nic.cl/registry/Whois.do).
+- **Blacklist Check** solo acepta IPv4. Requiere la IP directa, no el dominio.
 - Las consultas DNS van directo al navegador sin pasar por el Worker.
 - `worker.js` no está en el repo público por seguridad.
 
@@ -135,7 +143,8 @@ Activa en **Settings → Pages → Branch: `main` / `/ (root)`**
 - [x] Response Time
 - [x] Technology Detection
 - [x] WHOIS de dominios (20+ TLDs)
-- [ ] Blacklist Check
+- [x] Blacklist Check (10 listas DNSBL)
+- [ ] Blacklist Check por dominio
 - [ ] Más TLDs en WHOIS
 
 ---
