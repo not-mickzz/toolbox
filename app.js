@@ -42,13 +42,16 @@ const TOOLS = {
   'web-headers': { category:'web', label:'HTTP Headers',    icon:'🛡️', desc:'Analiza headers de seguridad: HSTS, CSP, X-Frame-Options y más.' },
   'web-timing':  { category:'web', label:'Response Time',   icon:'⚡', desc:'Tiempo de respuesta del servidor, TTFB y estado HTTP.' },
   'web-tech':    { category:'web', label:'Technologies',    icon:'🔬', desc:'Detecta CMS, frameworks, servidores web y librerías.' },
+  // Security
+  'blacklist':   { category:'security', label:'Blacklist Check', icon:'🚫', desc:'Verifica si una IP está en listas negras de spam, malware y botnets (DNSBL).' },
 };
 
 const CATEGORIES = {
-  dns: { label:'DNS',       icon:'⬡' },
-  ip:  { label:'IP Tools',  icon:'◎' },
-  ssl: { label:'SSL / TLS', icon:'🔒' },
-  web: { label:'Web',       icon:'🌍' },
+  dns:      { label:'DNS',       icon:'⬡' },
+  ip:       { label:'IP Tools',  icon:'◎' },
+  ssl:      { label:'SSL / TLS', icon:'🔒' },
+  web:      { label:'Web',       icon:'🌍' },
+  security: { label:'Security',  icon:'🚫' },
 };
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
@@ -79,6 +82,8 @@ function selectCategory(cat) {
     ? 'ej: google.com, mickzz.xyz'
     : cat === 'ssl' || cat === 'web'
     ? 'ej: mickzz.xyz, google.com'
+    : cat === 'security'
+    ? 'ej: 8.8.8.8, 1.2.3.4'
     : 'ej: 8.8.8.8, 1.1.1.1, 2606:4700::1111';
 }
 
@@ -688,6 +693,87 @@ async function fetchWhois(domain) {
     </div>`;
 }
 
+// ── BLACKLIST CHECK ───────────────────────────────────────────────────────────
+const DNSBL_LISTS = [
+  { name: 'Spamhaus ZEN',          host: 'zen.spamhaus.org',          type: 'spam+exploits' },
+  { name: 'SpamCop',               host: 'bl.spamcop.net',            type: 'spam' },
+  { name: 'SORBS SPAM',            host: 'spam.dnsbl.sorbs.net',      type: 'spam' },
+  { name: 'SORBS HTTP',            host: 'http.dnsbl.sorbs.net',      type: 'proxy' },
+  { name: 'Barracuda',             host: 'b.barracudacentral.org',    type: 'spam' },
+  { name: 'UCEprotect L1',         host: 'dnsbl-1.uceprotect.net',    type: 'spam' },
+  { name: 'UCEprotect L2',         host: 'dnsbl-2.uceprotect.net',    type: 'spam' },
+  { name: 'NordSpam',              host: 'bl.nordspam.com',           type: 'spam' },
+  { name: 'PSBL',                  host: 'psbl.surriel.com',          type: 'spam' },
+  { name: 'Truncate',              host: 'truncate.gbudb.net',        type: 'spam' },
+];
+
+async function checkDNSBL(reversedIP, list) {
+  const query = `${reversedIP}.${list.host}`;
+  try {
+    const res = await fetch(RESOLVERS.google(query, 'A'), { headers: { 'Accept': 'application/dns-json' } });
+    const data = await res.json();
+    const listed = data.Status === 0 && (data.Answer?.length > 0);
+    return { ...list, listed, answer: data.Answer?.[0]?.data || null };
+  } catch {
+    return { ...list, listed: false, answer: null };
+  }
+}
+
+async function fetchBlacklist(ip) {
+  // Validate it's an IPv4
+  const ipv4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!ipv4) throw new Error('Ingresa una dirección IPv4 válida (ej: 8.8.8.8)');
+
+  const reversed = ip.split('.').reverse().join('.');
+
+  // Check all lists in parallel
+  const results = await Promise.all(DNSBL_LISTS.map(list => checkDNSBL(reversed, list)));
+
+  const listed   = results.filter(r => r.listed);
+  const clean    = results.filter(r => !r.listed);
+  const score    = listed.length;
+
+  const verdict = score === 0
+    ? `<span class="tag tag-ok" style="font-size:14px;padding:6px 14px">🟢 LIMPIO</span>`
+    : score <= 2
+    ? `<span class="tag tag-warn" style="font-size:14px;padding:6px 14px">🟡 SOSPECHOSO</span>`
+    : `<span class="tag tag-err" style="font-size:14px;padding:6px 14px">🔴 EN LISTA NEGRA</span>`;
+
+  return `
+    <div class="result-block">
+      <div class="result-block-header">
+        <span class="rec-type-badge type-${score === 0 ? 'NS' : score <= 2 ? 'SOA' : 'MX'}">BLACKLIST CHECK</span>
+        <span class="rec-count">${ip}</span>
+        ${verdict}
+        <span style="margin-left:auto;font-size:11px;color:var(--text-dim)">${listed.length} / ${results.length} listas</span>
+      </div>
+
+      ${listed.length > 0 ? `
+      <div style="margin-bottom:12px">
+        <div style="font-size:10px;color:var(--error);letter-spacing:2px;margin-bottom:8px">EN LISTA NEGRA</div>
+        <table class="rec-table"><tbody>
+          ${listed.map(r => `<tr>
+            <td class="rec-data"><span class="tag tag-err">❌</span> ${r.name}</td>
+            <td class="rec-name">${r.type}</td>
+            <td class="rec-ttl">${r.host}</td>
+          </tr>`).join('')}
+        </tbody></table>
+      </div>` : ''}
+
+      <div>
+        <div style="font-size:10px;color:var(--success);letter-spacing:2px;margin-bottom:8px">LIMPIO EN</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${clean.map(r => `<span class="tag tag-ok">✅ ${r.name}</span>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    ${listed.length > 0 ? `
+    <div style="font-size:11px;color:var(--text-dim);padding:8px 0;line-height:1.8">
+      ℹ️ Para solicitar la eliminación de estas listas, visita directamente el sitio de cada proveedor.
+    </div>` : ''}`;
+}
+
 // ── RUN TOOL ──────────────────────────────────────────────────────────────────
 async function runTool() {
   const input = document.getElementById('domainInput').value.trim().toLowerCase();
@@ -760,6 +846,10 @@ async function runTool() {
         html = await fetchWebTiming(input);
       } else if (currentTool === 'web-tech') {
         html = await fetchWebTech(input);
+      }
+    } else if (currentCategory === 'security') {
+      if (currentTool === 'blacklist') {
+        html = await fetchBlacklist(input);
       }
     }
 
