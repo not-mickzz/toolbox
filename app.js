@@ -467,7 +467,7 @@ async function fetchCertInfo(domain) {
     return `<div style="color:var(--error);padding:20px">❌ No se pudo analizar ${domain}.</div>`;
   }
 
-  return fetchAndRenderSSL(domain, 'cert');
+  return await fetchAndRenderSSL(domain, 'cert');
 }
 
 // ── WEB ───────────────────────────────────────────────────────────────────────
