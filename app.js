@@ -1019,6 +1019,27 @@ async function runTool() {
   const input = document.getElementById('domainInput').value.trim().toLowerCase();
   if (!input) { showError('⚠ Ingresa un dominio o IP.'); return; }
 
+  // Validación básica según categoría
+  if (currentCategory === 'security') {
+    // Debe ser IPv4 válida
+    if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(input)) {
+      showError('⚠ Ingresa una dirección IPv4 válida.\nEjemplo: 8.8.8.8');
+      return;
+    }
+  } else if (currentCategory === 'ip' && currentTool !== 'reverse-dns') {
+    // IP Lookup e IP WHOIS necesitan una IP
+    if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(input) && !input.includes(':')) {
+      showError('⚠ Ingresa una dirección IP válida.\nEjemplo: 8.8.8.8');
+      return;
+    }
+  } else {
+    // Para todo lo demás debe ser un dominio con al menos un punto
+    if (!input.includes('.') || input.startsWith('.') || input.endsWith('.')) {
+      showError('⚠ Ingresa un dominio válido.\nEjemplo: google.com, mickzz.xyz');
+      return;
+    }
+  }
+
   const tool = TOOLS[currentTool];
   const btn  = document.getElementById('runBtn');
   btn.disabled = true;
@@ -1126,7 +1147,10 @@ function addToHistory(val) {
   ).join('');
 }
 
-function useDomain(d) { document.getElementById('domainInput').value = d; runTool(); }
+function useDomain(d) {
+  document.getElementById('domainInput').value = d;
+  // Solo rellena el input, no ejecuta automáticamente
+}
 
 function copyResult() {
   const text = document.getElementById('outputBody').innerText;
