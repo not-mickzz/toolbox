@@ -2,7 +2,7 @@
 
 Herramienta web de análisis de red en tiempo real. Sin dependencias front-end, sin costos — consulta directamente a Google DNS, Cloudflare DNS y APIs públicas desde el navegador via Cloudflare Workers.
 
-![Status](https://img.shields.io/badge/status-active-00e5a0?style=flat-square) ![DNS](https://img.shields.io/badge/DNS-Real%20Time-00e5ff?style=flat-square) ![SSL](https://img.shields.io/badge/SSL-SSL%20Labs-7fff00?style=flat-square) ![Web](https://img.shields.io/badge/Web-Analysis-ff6b35?style=flat-square) ![Security](https://img.shields.io/badge/Security-DNSBL-ff4455?style=flat-square)
+![Status](https://img.shields.io/badge/status-active-00e5a0?style=flat-square) ![DNS](https://img.shields.io/badge/DNS-Real%20Time-00e5ff?style=flat-square) ![SSL](https://img.shields.io/badge/SSL-SSL%20Labs-7fff00?style=flat-square) ![Web](https://img.shields.io/badge/Web-Analysis-ff6b35?style=flat-square) ![Security](https://img.shields.io/badge/Security-DNSBL-ff4455?style=flat-square) ![Email](https://img.shields.io/badge/Email-Analyzer-ff9f40?style=flat-square)
 
 🔗 **[mickzz.xyz/toolbox](https://mickzz.xyz/toolbox)**
 
@@ -48,6 +48,14 @@ Herramienta web de análisis de red en tiempo real. Sin dependencias front-end, 
 |---|---|
 | 🚫 **Blacklist Check** | Verifica si una IP está en 10 listas negras de spam y malware (DNSBL) |
 
+### 📧 Email
+| Herramienta | Descripción |
+|---|---|
+| 🛡️ **Email Security** | Análisis completo SPF + DKIM + DMARC con nota A+/A/B/C/D/F |
+| 📋 **SPF Analyzer** | Parsea mecanismos, calificadores y puntuación del registro SPF |
+| 🔑 **DKIM Checker** | Busca y verifica 18 selectores DKIM comunes del dominio |
+| 📊 **DMARC Analyzer** | Política, alineación, reportes y configuración DMARC |
+
 ---
 
 ## 🏗️ Arquitectura
@@ -57,6 +65,7 @@ Navegador (mickzz.xyz/toolbox)
     │
     ├── DNS queries      →  dns.google / cloudflare-dns.com (DoH, directo)
     ├── DNSBL queries    →  dns.google (DoH, directo — sin backend)
+    ├── Email queries    →  dns.google (DoH, directo — sin backend)
     │
     └── Via Worker proxy (toolbox.mickzz.workers.dev)
             ├── /ip/:ip        →  ipinfo.io
@@ -73,7 +82,7 @@ Navegador (mickzz.xyz/toolbox)
 toolbox/
 ├── index.html    # Estructura HTML
 ├── styles.css    # Estilos (tema oscuro navy)
-├── app.js        # Lógica DNS + IP + SSL + Web + Security
+├── app.js        # Lógica DNS + IP + SSL + Web + Security + Email
 ├── favicon.svg   # Ícono
 └── README.md
 ```
@@ -112,7 +121,7 @@ Activa en **Settings → Pages → Branch: `main` / `/ (root)`**
 
 | API | Uso | Límite gratuito |
 |---|---|---|
-| `dns.google` | Consultas DNS + DNSBL | Sin límite |
+| `dns.google` | DNS + DNSBL + Email analysis | Sin límite |
 | `cloudflare-dns.com` | Consultas DNS | Sin límite |
 | `ipinfo.io` | Geolocalización IP | 50.000 req/mes |
 | `rdap.arin.net` | IP WHOIS | Sin límite |
@@ -124,11 +133,11 @@ Activa en **Settings → Pages → Branch: `main` / `/ (root)`**
 
 ## ⚠️ Notas
 
-- **SSL Check** usa SSL Labs API — puede tardar **60-90 segundos** la primera vez. El resultado se guarda en caché hasta recargar la página.
+- **SSL Check** usa SSL Labs API — puede tardar **60-90 segundos** la primera vez. El resultado se guarda en caché hasta recargar la página. **Certificado** usa el mismo caché.
 - **WHOIS** soporta: `.com` `.net` `.org` `.xyz` `.io` `.ai` `.dev` `.app` `.info` `.biz` `.co` `.me` `.us` `.uk` `.ca` `.eu` `.de` `.fr` `.br` `.ar` `.mx`
 - **WHOIS .cl** — NIC Chile no tiene RDAP público. Al consultar un `.cl` se muestra un link directo a [nic.cl](https://www.nic.cl/registry/Whois.do).
-- **Blacklist Check** solo acepta IPv4. Requiere la IP directa, no el dominio.
-- Las consultas DNS van directo al navegador sin pasar por el Worker.
+- **Blacklist Check** solo acepta IPv4.
+- **Email** — todas las herramientas funcionan via DNS directo, sin backend ni API key.
 - `worker.js` no está en el repo público por seguridad.
 
 ---
@@ -144,8 +153,10 @@ Activa en **Settings → Pages → Branch: `main` / `/ (root)`**
 - [x] Technology Detection
 - [x] WHOIS de dominios (20+ TLDs)
 - [x] Blacklist Check (10 listas DNSBL)
+- [x] Email Security Analyzer (SPF, DKIM, DMARC)
 - [ ] Blacklist Check por dominio
-- [ ] Más TLDs en WHOIS
+- [ ] Subdomain Finder
+- [ ] Password Breach Checker
 
 ---
 
