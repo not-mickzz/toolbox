@@ -44,6 +44,11 @@ const TOOLS = {
   'web-tech':    { category:'web', label:'Technologies',    icon:'🔬', desc:'Detecta CMS, frameworks, servidores web y librerías.' },
   // Security
   'blacklist':   { category:'security', label:'Blacklist Check', icon:'🚫', desc:'Verifica si una IP está en listas negras de spam, malware y botnets (DNSBL).' },
+  // Email
+  'email-security': { category:'email', label:'Email Security', icon:'🛡️', desc:'Análisis completo de seguridad del correo: SPF, DKIM, DMARC con puntuación.' },
+  'spf-analyzer':   { category:'email', label:'SPF Analyzer',   icon:'📋', desc:'Analiza el registro SPF: mecanismos, directivas y posibles problemas.' },
+  'dkim-checker':   { category:'email', label:'DKIM Checker',   icon:'🔑', desc:'Busca y verifica selectores DKIM comunes del dominio.' },
+  'dmarc-analyzer': { category:'email', label:'DMARC Analyzer', icon:'📊', desc:'Analiza la política DMARC: modo, reportes y configuración.' },
 };
 
 const CATEGORIES = {
@@ -52,6 +57,7 @@ const CATEGORIES = {
   ssl:      { label:'SSL / TLS', icon:'🔒' },
   web:      { label:'Web',       icon:'🌍' },
   security: { label:'Security',  icon:'🚫' },
+  email:    { label:'Email',     icon:'📧' },
 };
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
@@ -80,7 +86,7 @@ function selectCategory(cat) {
   document.getElementById('resolverRow').style.display = cat === 'dns' ? 'flex' : 'none';
   document.getElementById('domainInput').placeholder = cat === 'dns'
     ? 'ej: google.com, mickzz.xyz'
-    : cat === 'ssl' || cat === 'web'
+    : cat === 'ssl' || cat === 'web' || cat === 'email'
     ? 'ej: mickzz.xyz, google.com'
     : cat === 'security'
     ? 'ej: 8.8.8.8, 1.2.3.4'
@@ -718,6 +724,296 @@ async function fetchBlacklist(ip) {
     </div>` : ''}`;
 }
 
+// ── EMAIL SECURITY ────────────────────────────────────────────────────────────
+
+// Helper: query TXT records and find matching ones
+async function getTXT(domain) {
+  const res = await fetch(RESOLVERS.google(domain, 'TXT'), { headers: { 'Accept': 'application/dns-json' } });
+  const data = await res.json();
+  return (data.Answer || []).map(r => r.data?.replace(/^"|"$/g, '').replace(/"\s*"/g, '') || '');
+}
+
+async function getMX(domain) {
+  const res = await fetch(RESOLVERS.google(domain, 'MX'), { headers: { 'Accept': 'application/dns-json' } });
+  const data = await res.json();
+  return data.Answer || [];
+}
+
+// ── SPF ───────────────────────────────────────────────────────────────────────
+function analyzeSPF(spf) {
+  if (!spf) return { score: 0, issues: ['Sin registro SPF'], recommendations: ['Agrega un registro SPF a tu dominio'] };
+
+  const issues = [];
+  const recommendations = [];
+  let score = 40; // base por tener SPF
+
+  // Check all directive
+  if (spf.includes('-all'))      score += 30;
+  else if (spf.includes('~all')) { score += 15; issues.push('Usa ~all (softfail) en vez de -all (fail)'); recommendations.push('Cambia ~all por -all para mayor seguridad'); }
+  else if (spf.includes('?all')) { issues.push('Usa ?all (neutral) — no protege'); recommendations.push('Cambia ?all por -all'); }
+  else if (spf.includes('+all')) { score -= 20; issues.push('⚠ +all permite CUALQUIER servidor enviar en tu nombre'); recommendations.push('Elimina +all inmediatamente y agrega -all'); }
+
+  // Check includes count (max 10 DNS lookups)
+  const includes = (spf.match(/include:/g) || []).length;
+  if (includes > 8) { issues.push(`Demasiados includes (${includes}) — puede superar el límite de 10 lookups DNS`); score -= 10; }
+  else score += 10;
+
+  // Check for ip4/ip6 (good practice)
+  if (spf.includes('ip4:') || spf.includes('ip6:')) score += 10;
+
+  // Check for ptr (deprecated)
+  if (spf.includes('ptr')) { issues.push('Usa ptr: (mecanismo obsoleto y lento)'); recommendations.push('Elimina ptr: del registro SPF'); score -= 5; }
+
+  return { score: Math.min(100, Math.max(0, score)), issues, recommendations };
+}
+
+async function fetchSPF(domain) {
+  const txts = await getTXT(domain);
+  const spf = txts.find(t => t.startsWith('v=spf1')) || null;
+  const analysis = analyzeSPF(spf);
+
+  const scoreTag = `<span class="tag ${analysis.score >= 80 ? 'tag-ok' : analysis.score >= 50 ? 'tag-warn' : 'tag-err'}" style="font-size:13px;padding:4px 12px">${analysis.score}/100</span>`;
+
+  // Parse mechanisms
+  const mechanisms = spf ? spf.split(' ').slice(1).map(m => {
+    const qualifier = ['+','-','~','?'].includes(m[0]) ? m[0] : '+';
+    const mech = qualifier === '+' ? m : m.slice(1);
+    const color = qualifier === '-' ? 'tag-ok' : qualifier === '~' ? 'tag-warn' : qualifier === '+' && mech !== 'all' ? 'tag-info' : qualifier === '+' && mech === 'all' ? 'tag-err' : 'tag-info';
+    return { qualifier, mech, color };
+  }) : [];
+
+  return `
+    <div class="result-block">
+      <div class="result-block-header">
+        <span class="rec-type-badge type-TXT">SPF</span>
+        ${spf ? '<span class="tag tag-ok">✓ EXISTE</span>' : '<span class="tag tag-err">✗ NO EXISTE</span>'}
+        ${scoreTag}
+      </div>
+      ${spf ? `
+        <div style="background:var(--bg);border:1px solid var(--border);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--accent3);word-break:break-all">${spf}</div>
+        <table class="rec-table"><thead><tr><th>CALIFICADOR</th><th>MECANISMO</th></tr></thead><tbody>
+          ${mechanisms.map(m => `<tr>
+            <td><span class="tag ${m.color}">${m.qualifier === '+' ? 'PASS' : m.qualifier === '-' ? 'FAIL' : m.qualifier === '~' ? 'SOFTFAIL' : 'NEUTRAL'}</span></td>
+            <td class="rec-data">${m.mech}</td>
+          </tr>`).join('')}
+        </tbody></table>` : '<div class="no-records">Sin registro SPF en este dominio</div>'}
+      ${analysis.issues.length ? `
+        <div style="margin-top:12px">
+          ${analysis.issues.map(i => `<div style="margin:4px 0"><span class="tag tag-warn">⚠</span> ${i}</div>`).join('')}
+        </div>` : ''}
+      ${analysis.recommendations.length ? `
+        <div style="margin-top:10px;font-size:11px;color:var(--text-dim)">
+          ${analysis.recommendations.map(r => `<div style="margin:3px 0">→ ${r}</div>`).join('')}
+        </div>` : ''}
+    </div>`;
+}
+
+// ── DKIM ──────────────────────────────────────────────────────────────────────
+const DKIM_SELECTORS = ['default','google','mail','k1','k2','selector1','selector2','smtp','dkim','email','s1','s2','key1','key2','mimecast','pm','mandrill','sendgrid'];
+
+async function checkDKIMSelector(domain, selector) {
+  try {
+    const res = await fetch(RESOLVERS.google(`${selector}._domainkey.${domain}`, 'TXT'), { headers: { 'Accept': 'application/dns-json' } });
+    const data = await res.json();
+    const record = (data.Answer || []).find(r => r.data?.includes('v=DKIM1'));
+    return record ? { selector, record: record.data.replace(/^"|"$/g, '').replace(/"\s*"/g, '') } : null;
+  } catch { return null; }
+}
+
+async function fetchDKIM(domain) {
+  // Check all selectors in parallel
+  const results = await Promise.all(DKIM_SELECTORS.map(s => checkDKIMSelector(domain, s)));
+  const found = results.filter(Boolean);
+
+  return `
+    <div class="result-block">
+      <div class="result-block-header">
+        <span class="rec-type-badge type-A">DKIM</span>
+        ${found.length ? `<span class="tag tag-ok">✓ ${found.length} selector${found.length > 1 ? 'es' : ''} encontrado${found.length > 1 ? 's' : ''}</span>` : '<span class="tag tag-err">✗ SIN SELECTORES</span>'}
+        <span class="rec-count">${DKIM_SELECTORS.length} selectores verificados</span>
+      </div>
+      ${found.length ? found.map(f => `
+        <div style="margin-bottom:12px">
+          <div style="font-size:11px;color:var(--accent);letter-spacing:1px;margin-bottom:6px">SELECTOR: ${f.selector}._domainkey.${domain}</div>
+          <div style="background:var(--bg);border:1px solid var(--border);padding:10px 14px;font-size:11px;color:var(--text-dim);word-break:break-all">${f.record}</div>
+          ${(() => {
+            const keyType = f.record.match(/k=([^;]+)/)?.[1] || 'rsa';
+            const valid = f.record.includes('v=DKIM1') && f.record.includes('p=');
+            const hasKey = f.record.match(/p=([^;]+)/)?.[1]?.length > 10;
+            return `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+              ${valid ? '<span class="tag tag-ok">✓ VÁLIDO</span>' : '<span class="tag tag-err">✗ INVÁLIDO</span>'}
+              <span class="tag tag-info">Tipo: ${keyType.toUpperCase()}</span>
+              ${hasKey ? '<span class="tag tag-ok">✓ Clave pública presente</span>' : '<span class="tag tag-err">✗ Clave revocada</span>'}
+            </div>`;
+          })()}
+        </div>`).join('') : `
+        <div class="no-records">No se encontraron selectores DKIM conocidos.</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:8px;line-height:1.8">
+          Selectores verificados: ${DKIM_SELECTORS.join(', ')}<br>
+          Si tu proveedor usa un selector diferente, consúltalo en su documentación.
+        </div>`}
+    </div>`;
+}
+
+// ── DMARC ─────────────────────────────────────────────────────────────────────
+async function fetchDMARC(domain) {
+  const txts = await getTXT(`_dmarc.${domain}`);
+  const dmarc = txts.find(t => t.startsWith('v=DMARC1')) || null;
+
+  if (!dmarc) return `
+    <div class="result-block">
+      <div class="result-block-header">
+        <span class="rec-type-badge type-MX">DMARC</span>
+        <span class="tag tag-err">✗ NO EXISTE</span>
+      </div>
+      <div class="no-records">Sin registro DMARC en _dmarc.${domain}</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:8px;line-height:1.8">
+        → Agrega un registro TXT en <strong>_dmarc.${domain}</strong><br>
+        → Ejemplo mínimo: <code style="color:var(--accent3)">v=DMARC1; p=none; rua=mailto:dmarc@${domain}</code>
+      </div>
+    </div>`;
+
+  // Parse tags
+  const tags = Object.fromEntries(dmarc.split(';').map(t => t.trim().split('=').map(s => s.trim())).filter(p => p.length === 2));
+  const policy    = tags['p']   || 'none';
+  const subPolicy = tags['sp']  || policy;
+  const pct       = tags['pct'] || '100';
+  const rua       = tags['rua'] || '—';
+  const ruf       = tags['ruf'] || '—';
+  const adkim     = tags['adkim'] || 'r';
+  const aspf      = tags['aspf']  || 'r';
+
+  const policyColor = policy === 'reject' ? 'tag-ok' : policy === 'quarantine' ? 'tag-warn' : 'tag-err';
+  const policyLabel = policy === 'reject' ? '🔴 REJECT' : policy === 'quarantine' ? '🟡 QUARANTINE' : '⚪ NONE';
+
+  let score = 20;
+  if (policy === 'reject')      score = 100;
+  else if (policy === 'quarantine') score = 70;
+  if (rua !== '—') score = Math.min(score + 10, 100);
+  if (adkim === 's') score = Math.min(score + 5, 100);
+  if (aspf === 's')  score = Math.min(score + 5, 100);
+
+  const scoreTag = `<span class="tag ${score >= 80 ? 'tag-ok' : score >= 50 ? 'tag-warn' : 'tag-err'}" style="font-size:13px;padding:4px 12px">${score}/100</span>`;
+
+  return `
+    <div class="result-block">
+      <div class="result-block-header">
+        <span class="rec-type-badge type-MX">DMARC</span>
+        <span class="tag tag-ok">✓ EXISTE</span>
+        <span class="tag ${policyColor}">${policyLabel}</span>
+        ${scoreTag}
+      </div>
+      <div style="background:var(--bg);border:1px solid var(--border);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--accent3);word-break:break-all">${dmarc}</div>
+      <table class="rec-table"><tbody>
+        <tr><td class="rec-name">POLÍTICA (p=)</td><td class="rec-data"><span class="tag ${policyColor}">${policy}</span> — ${policy === 'reject' ? 'Rechaza emails no autenticados' : policy === 'quarantine' ? 'Envía a spam emails no autenticados' : 'Solo monitoreo, sin acción'}</td></tr>
+        <tr><td class="rec-name">SUBDOMINIO (sp=)</td><td class="rec-data">${subPolicy}</td></tr>
+        <tr><td class="rec-name">PORCENTAJE (pct=)</td><td class="rec-data">${pct}% de los emails aplican esta política</td></tr>
+        <tr><td class="rec-name">REPORTES (rua=)</td><td class="rec-data">${rua}</td></tr>
+        <tr><td class="rec-name">REPORTES FORENSE (ruf=)</td><td class="rec-data">${ruf}</td></tr>
+        <tr><td class="rec-name">ALINEACIÓN DKIM (adkim=)</td><td class="rec-data">${adkim === 's' ? '<span class="tag tag-ok">strict</span>' : '<span class="tag tag-warn">relaxed</span>'}</td></tr>
+        <tr><td class="rec-name">ALINEACIÓN SPF (aspf=)</td><td class="rec-data">${aspf === 's' ? '<span class="tag tag-ok">strict</span>' : '<span class="tag tag-warn">relaxed</span>'}</td></tr>
+      </tbody></table>
+      ${policy === 'none' ? '<div style="margin-top:10px;font-size:11px;color:var(--text-dim)">→ Considera cambiar a <strong>p=quarantine</strong> o <strong>p=reject</strong> para mayor protección</div>' : ''}
+    </div>`;
+}
+
+// ── EMAIL SECURITY (análisis completo) ────────────────────────────────────────
+async function fetchEmailSecurity(domain) {
+  // Run all checks in parallel
+  const [txts, mxRecords, dmarcTxts, dkimResults] = await Promise.all([
+    getTXT(domain),
+    getMX(domain),
+    getTXT(`_dmarc.${domain}`),
+    Promise.all(DKIM_SELECTORS.slice(0, 8).map(s => checkDKIMSelector(domain, s)))
+  ]);
+
+  const spf   = txts.find(t => t.startsWith('v=spf1')) || null;
+  const dmarc = dmarcTxts.find(t => t.startsWith('v=DMARC1')) || null;
+  const dkim  = dkimResults.filter(Boolean);
+
+  // Scores
+  const spfAnalysis   = analyzeSPF(spf);
+  const dmarcPolicy   = dmarc ? (dmarc.match(/p=(\w+)/)?.[1] || 'none') : null;
+  const dmarcScore    = !dmarc ? 0 : dmarcPolicy === 'reject' ? 100 : dmarcPolicy === 'quarantine' ? 70 : 20;
+  const dkimScore     = dkim.length > 0 ? 100 : 0;
+  const totalScore    = Math.round((spfAnalysis.score + dmarcScore + dkimScore) / 3);
+
+  const scoreColor = totalScore >= 80 ? 'tag-ok' : totalScore >= 50 ? 'tag-warn' : 'tag-err';
+  const grade = totalScore >= 90 ? 'A+' : totalScore >= 80 ? 'A' : totalScore >= 70 ? 'B' : totalScore >= 50 ? 'C' : totalScore >= 30 ? 'D' : 'F';
+
+  // Detect email provider from MX
+  const mxNames = mxRecords.map(r => r.data?.toLowerCase() || '');
+  const provider = mxNames.some(m => m.includes('google') || m.includes('gmail'))    ? 'Google Workspace'
+    : mxNames.some(m => m.includes('outlook') || m.includes('microsoft'))            ? 'Microsoft 365'
+    : mxNames.some(m => m.includes('zoho'))                                           ? 'Zoho Mail'
+    : mxNames.some(m => m.includes('proton'))                                         ? 'Proton Mail'
+    : mxNames.some(m => m.includes('mimecast'))                                       ? 'Mimecast'
+    : mxNames.length > 0                                                              ? 'Servidor propio'
+    : 'Sin MX configurado';
+
+  return `
+    <div class="ssl-hero" style="margin-bottom:16px">
+      <div class="ssl-grade" style="color:${totalScore >= 80 ? 'var(--success)' : totalScore >= 50 ? 'var(--warn)' : 'var(--error)'}">${grade}</div>
+      <div>
+        <div style="font-size:16px;color:var(--text-bright);font-family:'Space Mono',monospace">${domain}</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:4px">📧 ${provider}</div>
+      </div>
+      <div style="margin-left:auto;text-align:right">
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">PUNTUACIÓN GENERAL</div>
+        <span class="tag ${scoreColor}" style="font-size:15px;padding:5px 14px">${totalScore}/100</span>
+      </div>
+    </div>
+
+    <div class="result-block">
+      <div class="result-block-header"><span class="rec-type-badge type-MX">MX RECORDS</span></div>
+      ${mxRecords.length ? `<table class="rec-table"><tbody>
+        ${mxRecords.map(r => `<tr>
+          <td class="rec-priority" style="min-width:50px">${r.data?.split(' ')[0]}</td>
+          <td class="rec-data">${r.data?.split(' ').slice(1).join(' ')}</td>
+        </tr>`).join('')}
+      </tbody></table>` : '<div class="no-records">Sin registros MX</div>'}
+    </div>
+
+    <div class="result-block">
+      <div class="result-block-header">
+        <span class="rec-type-badge type-TXT">SPF</span>
+        ${spf ? '<span class="tag tag-ok">✓ EXISTE</span>' : '<span class="tag tag-err">✗ NO EXISTE</span>'}
+        <span class="tag ${spfAnalysis.score >= 80 ? 'tag-ok' : spfAnalysis.score >= 50 ? 'tag-warn' : 'tag-err'}">${spfAnalysis.score}/100</span>
+      </div>
+      ${spf ? `<div style="font-size:11px;color:var(--text-dim);padding:6px 0;word-break:break-all">${spf}</div>` : '<div class="no-records">Sin registro SPF</div>'}
+      ${spfAnalysis.issues.map(i => `<div style="margin:3px 0;font-size:11px"><span class="tag tag-warn">⚠</span> ${i}</div>`).join('')}
+    </div>
+
+    <div class="result-block">
+      <div class="result-block-header">
+        <span class="rec-type-badge type-A">DKIM</span>
+        ${dkim.length ? `<span class="tag tag-ok">✓ ${dkim.length} selector${dkim.length > 1 ? 'es' : ''}</span>` : '<span class="tag tag-err">✗ NO ENCONTRADO</span>'}
+        <span class="tag ${dkimScore === 100 ? 'tag-ok' : 'tag-err'}">${dkimScore}/100</span>
+      </div>
+      ${dkim.length ? dkim.map(d => `<div style="font-size:11px;color:var(--text-dim);padding:3px 0">✓ Selector: <span style="color:var(--accent)">${d.selector}</span></div>`).join('') : '<div class="no-records">No se encontraron selectores DKIM</div>'}
+    </div>
+
+    <div class="result-block">
+      <div class="result-block-header">
+        <span class="rec-type-badge type-MX">DMARC</span>
+        ${dmarc ? '<span class="tag tag-ok">✓ EXISTE</span>' : '<span class="tag tag-err">✗ NO EXISTE</span>'}
+        ${dmarc ? `<span class="tag ${dmarcPolicy === 'reject' ? 'tag-ok' : dmarcPolicy === 'quarantine' ? 'tag-warn' : 'tag-err'}">${dmarcPolicy?.toUpperCase()}</span>` : ''}
+        <span class="tag ${dmarcScore >= 80 ? 'tag-ok' : dmarcScore >= 50 ? 'tag-warn' : 'tag-err'}">${dmarcScore}/100</span>
+      </div>
+      ${dmarc ? `<div style="font-size:11px;color:var(--text-dim);padding:6px 0;word-break:break-all">${dmarc}</div>` : '<div class="no-records">Sin registro DMARC</div>'}
+    </div>
+
+    ${totalScore < 80 ? `
+    <div style="background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.15);padding:14px;font-size:11px;line-height:1.9;color:var(--text-dim)">
+      <div style="color:var(--accent);letter-spacing:1px;margin-bottom:8px">💡 RECOMENDACIONES</div>
+      ${!spf ? '<div>→ Agrega un registro SPF: <code style="color:var(--accent3)">v=spf1 include:... -all</code></div>' : ''}
+      ${spf && spf.includes('~all') ? '<div>→ Cambia ~all por -all en tu SPF para mayor seguridad</div>' : ''}
+      ${!dkim.length ? '<div>→ Configura DKIM en tu proveedor de correo</div>' : ''}
+      ${!dmarc ? '<div>→ Agrega DMARC: <code style="color:var(--accent3)">v=DMARC1; p=quarantine; rua=mailto:dmarc@${domain}</code></div>' : ''}
+      ${dmarc && dmarcPolicy === 'none' ? '<div>→ Cambia DMARC de p=none a p=quarantine o p=reject</div>' : ''}
+    </div>` : ''}`;
+}
+
 // ── RUN TOOL ──────────────────────────────────────────────────────────────────
 async function runTool() {
   const input = document.getElementById('domainInput').value.trim().toLowerCase();
@@ -794,6 +1090,16 @@ async function runTool() {
     } else if (currentCategory === 'security') {
       if (currentTool === 'blacklist') {
         html = await fetchBlacklist(input);
+      }
+    } else if (currentCategory === 'email') {
+      if (currentTool === 'email-security') {
+        html = await fetchEmailSecurity(input);
+      } else if (currentTool === 'spf-analyzer') {
+        html = await fetchSPF(input);
+      } else if (currentTool === 'dkim-checker') {
+        html = await fetchDKIM(input);
+      } else if (currentTool === 'dmarc-analyzer') {
+        html = await fetchDMARC(input);
       }
     }
 
