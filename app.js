@@ -460,70 +460,14 @@ async function fetchSSLHeaders(domain) {
 }
 
 async function fetchCertInfo(domain) {
-  const res = await fetch(`${WORKER_URL}/cert/${encodeURIComponent(domain)}`);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const certs = await res.json();
+  // Use SSL Labs data (same as SSL Check, uses cache if available)
+  const data = await fetchSSLLabsData(domain);
 
-  if (!certs?.length) return `<div style="color:var(--text-dim);padding:20px">Sin certificados encontrados para ${domain}</div>`;
+  if (data.status === 'ERROR' || !data.endpoints?.length) {
+    return `<div style="color:var(--error);padding:20px">❌ No se pudo analizar ${domain}.</div>`;
+  }
 
-  // Get the most recent valid cert (not expired, not pre-cert)
-  const now = Date.now();
-  const valid = certs
-    .filter(c => !c.name_value?.includes('*.') || c.name_value?.includes(domain))
-    .filter(c => new Date(c.not_after).getTime() > now)
-    .sort((a, b) => new Date(b.not_before) - new Date(a.not_before));
-
-  const cert = valid[0] || certs[0];
-
-  const notBefore = cert.not_before ? new Date(cert.not_before).toLocaleDateString('es-CL') : '—';
-  const notAfter  = cert.not_after  ? new Date(cert.not_after).toLocaleDateString('es-CL')  : '—';
-  const daysLeft  = cert.not_after  ? Math.ceil((new Date(cert.not_after) - now) / 86400000) : null;
-  const daysTag   = daysLeft !== null
-    ? `<span class="tag ${daysLeft > 30 ? 'tag-ok' : daysLeft > 7 ? 'tag-warn' : 'tag-err'}">${daysLeft} días</span>`
-    : '';
-
-  const issuer   = cert.issuer_name?.match(/CN=([^,]+)/)?.[1] || cert.issuer_name || '—';
-  const subject  = cert.name_value || cert.common_name || '—';
-  const sans     = cert.name_value?.split('\n').slice(0, 8).join(', ') || '—';
-
-  // Count total active certs
-  const activeCerts = certs.filter(c => new Date(c.not_after).getTime() > now).length;
-
-  return `
-    <div class="result-block">
-      <div class="result-block-header">
-        <span class="rec-type-badge type-A">CERTIFICADO ACTIVO</span>
-        ${daysTag}
-        <span class="tag tag-ok">✓ VÁLIDO</span>
-        <span class="rec-count">${activeCerts} cert${activeCerts !== 1 ? 's' : ''} activo${activeCerts !== 1 ? 's' : ''}</span>
-      </div>
-      <table class="rec-table"><tbody>
-        <tr><td class="rec-name">SUJETO</td><td class="rec-data">${subject}</td></tr>
-        <tr><td class="rec-name">EMISOR</td><td class="rec-data">${issuer}</td></tr>
-        <tr><td class="rec-name">VÁLIDO DESDE</td><td class="rec-data">${notBefore}</td></tr>
-        <tr><td class="rec-name">VÁLIDO HASTA</td><td class="rec-data">${notAfter} ${daysTag}</td></tr>
-        <tr><td class="rec-name">DOMINIOS (SAN)</td><td class="rec-data">${sans}</td></tr>
-        <tr><td class="rec-name">ID</td><td class="rec-data" style="font-size:11px">${cert.id || '—'}</td></tr>
-      </tbody></table>
-    </div>
-
-    ${valid.length > 1 ? `
-    <div class="result-block">
-      <div class="result-block-header">
-        <span class="rec-type-badge type-NS">HISTORIAL RECIENTE</span>
-        <span class="rec-count">${valid.length} certificados activos</span>
-      </div>
-      <table class="rec-table">
-        <thead><tr><th>EMISOR</th><th>DESDE</th><th>HASTA</th></tr></thead>
-        <tbody>
-          ${valid.slice(0, 5).map(c => `<tr>
-            <td class="rec-data">${c.issuer_name?.match(/CN=([^,]+)/)?.[1] || '—'}</td>
-            <td class="rec-ttl">${new Date(c.not_before).toLocaleDateString('es-CL')}</td>
-            <td class="rec-ttl">${new Date(c.not_after).toLocaleDateString('es-CL')}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>` : ''}`;
+  return fetchAndRenderSSL(domain, 'cert');
 }
 
 // ── WEB ───────────────────────────────────────────────────────────────────────
