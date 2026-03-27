@@ -1,15 +1,15 @@
 :root {
-  --bg: #111824;
-  --surface: #18202e;
-  --surface2: #1e2838;
-  --border: #283448;
+  --bg: #1a2535;
+  --surface: #212d40;
+  --surface2: #273347;
+  --border: #34455e;
   --accent: #00e5ff;
   --accent2: #7fff00;
   --accent3: #ff6b35;
   --warn: #ffd600;
-  --text: #a8c4d8;
-  --text-dim: #3a4a5a;
-  --text-bright: #ddeeff;
+  --text: #dceefa;
+  --text-dim: #9ab8d0;
+  --text-bright: #f5faff;
   --error: #ff4455;
   --success: #00e5a0;
 }
@@ -21,7 +21,7 @@ body {
   color: var(--text);
   font-family: 'JetBrains Mono', monospace;
   min-height: 100vh;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 body::before {
@@ -82,8 +82,8 @@ header {
 
 .header-badge {
   padding: 4px 10px;
-  border: 1px solid rgba(0,229,255,0.3);
-  color: var(--accent); font-size: 10px; letter-spacing: 2px; opacity: 0.6;
+  border: 1px solid rgb(0, 229, 255);
+  color: var(--accent); font-size: 10px; letter-spacing: 2px; opacity: 0.8;
 }
 
 /* ── TOOL GRID ── */
