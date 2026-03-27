@@ -1,5 +1,5 @@
 // ── CONFIG ────────────────────────────────────────────────────────────────────
-const WORKER_URL = 'https://toolbox.mickzz.workers.dev';
+const WORKER_URL = 'https://api.mickzz.xyz';
 
 // ── DNS RESOLVERS ─────────────────────────────────────────────────────────────
 const RESOLVERS = {
